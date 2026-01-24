@@ -1,0 +1,100 @@
+{
+  "version": "1.0",
+  "files": {
+    "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\__init__.py": {
+      "mtime": 1769253383.7479036,
+      "skeleton": "",
+      "nodes": [
+        {
+          "id": "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\__init__.py:FILE:D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\__init__.py",
+          "type": "FILE",
+          "name": "__init__.py",
+          "path": "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\__init__.py",
+          "range": [
+            0,
+            0
+          ],
+          "signature": "FILE __init__.py"
+        }
+      ],
+      "edges": [],
+      "co_occurrences": []
+    },
+    "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\core\\__init__.py": {
+      "mtime": 1769253383.7482734,
+      "skeleton": "",
+      "nodes": [
+        {
+          "id": "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\core\\__init__.py:FILE:D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\core\\__init__.py",
+          "type": "FILE",
+          "name": "__init__.py",
+          "path": "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\core\\__init__.py",
+          "range": [
+            0,
+            0
+          ],
+          "signature": "FILE __init__.py"
+        }
+      ],
+      "edges": [],
+      "co_occurrences": []
+    },
+    "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\engine\\__init__.py": {
+      "mtime": 1769253383.7485945,
+      "skeleton": "",
+      "nodes": [
+        {
+          "id": "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\engine\\__init__.py:FILE:D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\engine\\__init__.py",
+          "type": "FILE",
+          "name": "__init__.py",
+          "path": "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\engine\\__init__.py",
+          "range": [
+            0,
+            0
+          ],
+          "signature": "FILE __init__.py"
+        }
+      ],
+      "edges": [],
+      "co_occurrences": []
+    },
+    "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\plugins\\__init__.py": {
+      "mtime": 1769253383.748851,
+      "skeleton": "",
+      "nodes": [
+        {
+          "id": "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\plugins\\__init__.py:FILE:D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\plugins\\__init__.py",
+          "type": "FILE",
+          "name": "__init__.py",
+          "path": "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\plugins\\__init__.py",
+          "range": [
+            0,
+            0
+          ],
+          "signature": "FILE __init__.py"
+        }
+      ],
+      "edges": [],
+      "co_occurrences": []
+    },
+    "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\runner\\__init__.py": {
+      "mtime": 1769253383.7495916,
+      "skeleton": "",
+      "nodes": [
+        {
+          "id": "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\runner\\__init__.py:FILE:D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\runner\\__init__.py",
+          "type": "FILE",
+          "name": "__init__.py",
+          "path": "D:\\HOC_DAI_HOC\\NCKH\\Neuro-Symbolic_Software_Security\\src\\runner\\__init__.py",
+          "range": [
+            0,
+            0
+          ],
+          "signature": "FILE __init__.py"
+        }
+      ],
+      "edges": [],
+      "co_occurrences": []
+    }
+  }
+}
