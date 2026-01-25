@@ -6,6 +6,7 @@ from src.core.cfg.builder import CFGBuilder
 from src.core.scan.secrets import SecretScanner, SecretMatch
 from src.core.privacy.masker import PrivacyMasker
 from src.core.analysis.sanitizers import SanitizerRegistry
+from src.core.telemetry import get_logger, MeasureLatency
 
 
 @dataclass
@@ -32,7 +33,7 @@ class AnalysisOrchestrator:
         # CFGBuilder is instantiated per file usually, or we can reuse logic?
         # Based on builder.py, it seems stateful per build.
         self.sanitizer_registry = SanitizerRegistry()
-        self.logger = logging.getLogger(__name__)
+        self.logger = get_logger(__name__)
 
     def analyze_code(
         self, source_code: str, file_path: str = "<unknown>"
@@ -41,7 +42,8 @@ class AnalysisOrchestrator:
 
         # Step 1: Secret Scanning (on original code)
         try:
-            result.secrets = self.secret_scanner.scan(source_code)
+            with MeasureLatency("scan_secrets"):
+                result.secrets = self.secret_scanner.scan(source_code)
         except Exception as e:
             msg = f"Secret scanning failed: {e}"
             self.logger.error(msg)
@@ -49,13 +51,14 @@ class AnalysisOrchestrator:
 
         # Step 2: CFG Construction
         try:
-            import ast
+            with MeasureLatency("build_cfg"):
+                import ast
 
-            tree = ast.parse(source_code)
-            builder = CFGBuilder()
-            # Use module name derived from file path or default
-            module_name = file_path.split("/")[-1].replace(".py", "")
-            result.cfg = builder.build(module_name, tree)
+                tree = ast.parse(source_code)
+                builder = CFGBuilder()
+                # Use module name derived from file path or default
+                module_name = file_path.split("/")[-1].replace(".py", "")
+                result.cfg = builder.build(module_name, tree)
         except Exception as e:
             msg = f"CFG construction failed: {e}"
             self.logger.error(msg)
@@ -65,9 +68,10 @@ class AnalysisOrchestrator:
         # In a real scenario, this might be triggered only if we send to LLM.
         # For now, we execute it to verify the pipeline capability.
         try:
-            masked_code, mapping = self.privacy_masker.mask(source_code)
-            result.masked_code = masked_code
-            result.mask_mapping = mapping
+            with MeasureLatency("privacy_masking"):
+                masked_code, mapping = self.privacy_masker.mask(source_code)
+                result.masked_code = masked_code
+                result.mask_mapping = mapping
         except Exception as e:
             msg = f"Privacy masking failed: {e}"
             self.logger.error(msg)
