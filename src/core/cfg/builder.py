@@ -207,6 +207,28 @@ class CFGBuilder(ast.NodeVisitor):
         self.cfg.add_edge(self.current_block.id, header_block.id)
         self.current_block = exit_block
 
+    def visit_With(self, node: ast.With):
+        # Add the 'with' context managers to the current block
+        # as they are evaluated before entering the body.
+        for item in node.items:
+            self.current_block.add_statement(item.context_expr)
+            if item.optional_vars:
+                # This represents the 'as var' part, which is an assignment
+                self.current_block.add_statement(item.optional_vars)
+        
+        # Process the body of the 'with' statement
+        for stmt in node.body:
+            self.visit(stmt)
+
+    def visit_AsyncWith(self, node: ast.AsyncWith):
+        for item in node.items:
+            self.current_block.add_statement(item.context_expr)
+            if item.optional_vars:
+                self.current_block.add_statement(item.optional_vars)
+        
+        for stmt in node.body:
+            self.visit(stmt)
+
     # Default visitor for flat statements
     def generic_visit(self, node):
         if isinstance(node, (ast.Assign, ast.Expr, ast.Return, ast.AugAssign, ast.AnnAssign)):
