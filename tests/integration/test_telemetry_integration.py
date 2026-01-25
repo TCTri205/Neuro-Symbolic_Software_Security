@@ -29,8 +29,8 @@ def test_pipeline_telemetry():
     assert "scan_secrets" in latencies
     assert latencies["scan_secrets"]["count"] == 1
 
-    assert "build_cfg" in latencies
-    assert latencies["build_cfg"]["count"] == 1
+    assert "build_cfg_cg" in latencies
+    assert latencies["build_cfg_cg"]["count"] == 1
 
     assert "privacy_masking" in latencies
     assert latencies["privacy_masking"]["count"] == 1

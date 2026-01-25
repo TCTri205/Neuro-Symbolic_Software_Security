@@ -1,3 +1,4 @@
+from unittest.mock import patch, MagicMock
 from src.core.pipeline.orchestrator import AnalysisOrchestrator
 
 
@@ -48,3 +49,62 @@ def main():
         # Entropy scanner uses AST? If AST based, it fails.
         # Let's check that we didn't crash and got an error report.
         assert result.cfg is None or len(result.errors) > 0
+
+    @patch("src.core.pipeline.orchestrator.SemgrepRunner")
+    @patch("src.core.pipeline.orchestrator.LLMClient")
+    def test_advanced_features(self, MockLLM, MockSemgrep):
+        # Mock Semgrep
+        MockSemgrep.return_value.run.return_value = {
+            "results": [
+                {
+                    "check_id": "TEST.RULE",
+                    "path": "advanced.py",
+                    "start": {"line": 3, "col": 5},
+                    "extra": {"message": "bad", "severity": "ERROR"},
+                }
+            ]
+        }
+
+        # Mock LLM
+        llm_instance = MockLLM.return_value
+        llm_instance.is_configured = True
+        llm_instance.model = "gpt-4-mock"
+        llm_instance.chat.return_value = {
+            "content": '{"analysis": [{"verdict": "True Positive"}]}'
+        }
+
+        # Instantiate here to use mocks
+        orchestrator = AnalysisOrchestrator()
+
+        code = """
+def main():
+    x = 1
+    eval(x)
+"""
+        result = orchestrator.analyze_code(code, "advanced.py")
+
+        # Check Semgrep integration
+        assert result.semgrep_results is not None
+        assert len(result.semgrep_results["results"]) == 1
+
+        # Check Call Graph
+        assert result.call_graph is not None
+        # main definition should be in call graph (or at least definitions extracted)
+
+        # Check SSA
+        assert result.ssa is not None
+        assert len(result.ssa.vars) > 0
+
+        # Check LLM Insights
+        # We need to find the block that corresponds to line 3 (eval)
+        # and see if insights were added.
+        assert result.cfg is not None
+        has_insights = False
+        for block in result.cfg._blocks.values():
+            if block.llm_insights:
+                has_insights = True
+                assert (
+                    block.llm_insights[0]["analysis"][0]["verdict"] == "True Positive"
+                )
+
+        assert has_insights

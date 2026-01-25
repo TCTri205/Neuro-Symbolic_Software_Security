@@ -5,7 +5,8 @@ import json
 from unittest.mock import patch
 
 from src.librarian.core import Librarian
-from src.runner.pipeline.orchestrator import Pipeline
+from src.core.pipeline.orchestrator import AnalysisOrchestrator
+
 
 class TestLibrarianCore(unittest.TestCase):
     def setUp(self):
@@ -41,28 +42,28 @@ class TestLibrarianCore(unittest.TestCase):
         prompt2 = [{"role": "user", "content": "A"}]
         prompt3 = [{"role": "user", "content": "B"}]
 
-        self.assertEqual(self.librarian.compute_hash(prompt1), self.librarian.compute_hash(prompt2))
-        self.assertNotEqual(self.librarian.compute_hash(prompt1), self.librarian.compute_hash(prompt3))
+        self.assertEqual(
+            self.librarian.compute_hash(prompt1), self.librarian.compute_hash(prompt2)
+        )
+        self.assertNotEqual(
+            self.librarian.compute_hash(prompt1), self.librarian.compute_hash(prompt3)
+        )
 
     def test_profile_management(self):
         # Add a profile for Flask 2.x
         self.librarian.add_profile(
-            "flask", 
-            ">=2.0.0, <3.0.0", 
-            "sink", 
-            "flask.request.args", 
-            {"risk": "high"}
+            "flask", ">=2.0.0, <3.0.0", "sink", "flask.request.args", {"risk": "high"}
         )
-        
+
         # Test matching version
         profiles_2_1 = self.librarian.get_profiles("flask", "2.1.0")
         self.assertEqual(len(profiles_2_1), 1)
         self.assertEqual(profiles_2_1[0]["identifier"], "flask.request.args")
-        
+
         # Test non-matching version
         profiles_1_0 = self.librarian.get_profiles("flask", "1.0.0")
         self.assertEqual(len(profiles_1_0), 0)
-        
+
         # Test wildcard (no spec)
         self.librarian.add_profile("flask", "", "info", "general_info")
         profiles_wildcard = self.librarian.get_profiles("flask", "1.0.0")
@@ -73,12 +74,9 @@ class TestLibrarianCore(unittest.TestCase):
 class TestLibrarianIntegration(unittest.TestCase):
     def setUp(self):
         # We need to patch the default DB path for the pipeline's librarian
-        # or rely on the pipeline using the default one in the current dir, which is messy.
-        # Better to patch Librarian class in orchestrator to use a temp db or mock it.
-        # But we want to test actual DB integration inside pipeline.
         self.tmp_dir = tempfile.TemporaryDirectory()
         self.db_path = os.path.join(self.tmp_dir.name, "integration_test.db")
-        
+
     def tearDown(self):
         self.tmp_dir.cleanup()
         if os.path.exists("nsss_librarian.db"):
@@ -88,12 +86,12 @@ class TestLibrarianIntegration(unittest.TestCase):
             except OSError:
                 pass
 
-    @patch("src.runner.pipeline.orchestrator.Librarian")
+    @patch("src.core.pipeline.orchestrator.Librarian")
     def test_pipeline_caches_results(self, MockLibrarian):
         # Setup the mock to behave like a real librarian but with our temp db
         real_librarian = Librarian(self.db_path)
         MockLibrarian.return_value = real_librarian
-        
+
         code = """
 def foo():
     x = 1
@@ -116,23 +114,27 @@ def foo():
             }
 
             mock_llm_response = {
-                "content": json.dumps({
-                    "analysis": [
-                        {
-                            "check_id": "TEST.RULE",
-                            "verdict": "true positive",
-                            "rationale": "it is bad",
-                            "remediation": "fix it"
-                        }
-                    ]
-                })
+                "content": json.dumps(
+                    {
+                        "analysis": [
+                            {
+                                "check_id": "TEST.RULE",
+                                "verdict": "true positive",
+                                "rationale": "it is bad",
+                                "remediation": "fix it",
+                            }
+                        ]
+                    }
+                )
             }
 
-            with patch("src.runner.pipeline.orchestrator.SemgrepRunner") as mock_runner, \
-                 patch("src.runner.pipeline.orchestrator.LLMClient") as mock_llm:
-                
+            with patch(
+                "src.core.pipeline.orchestrator.SemgrepRunner"
+            ) as mock_runner, patch(
+                "src.core.pipeline.orchestrator.LLMClient"
+            ) as mock_llm:
                 mock_runner.return_value.run.return_value = mock_semgrep
-                
+
                 llm_instance = mock_llm.return_value
                 llm_instance.is_configured = True
                 llm_instance.provider = "openai"
@@ -140,40 +142,45 @@ def foo():
                 llm_instance.chat.return_value = mock_llm_response
 
                 # FIRST RUN
-                pipeline1 = Pipeline()
+                orchestrator1 = AnalysisOrchestrator()
                 # Ensure it's using our real_librarian (patched)
-                self.assertEqual(pipeline1.librarian, real_librarian)
-                
-                pipeline1.scan_file(file_path)
-                
+                self.assertEqual(orchestrator1.librarian, real_librarian)
+
+                res1 = orchestrator1.analyze_file(file_path)
+                result1 = res1.to_dict()
+
                 # Check results
-                result1 = pipeline1.results[file_path]
                 # Find block with insights
-                blocks_with_insights = [b for b in result1["structure"]["blocks"] if b["llm_insights"]]
+                blocks_with_insights = [
+                    b for b in result1["structure"]["blocks"] if b["llm_insights"]
+                ]
                 self.assertEqual(len(blocks_with_insights), 1)
                 insight1 = blocks_with_insights[0]["llm_insights"][0]
-                self.assertNotIn("cached", insight1) # First run not cached
-                
+                self.assertNotIn("cached", insight1)  # First run not cached
+
                 # Verify LLM was called
                 llm_instance.chat.assert_called()
                 call_count_after_first = llm_instance.chat.call_count
-                
+
                 # SECOND RUN - Should hit cache
-                pipeline2 = Pipeline()
+                orchestrator2 = AnalysisOrchestrator()
                 # Ensure it's using the SAME real_librarian (patched return value)
                 # (MockLibrarian return value is consistent)
-                
-                pipeline2.scan_file(file_path)
-                
-                result2 = pipeline2.results[file_path]
-                blocks_with_insights_2 = [b for b in result2["structure"]["blocks"] if b["llm_insights"]]
+
+                res2 = orchestrator2.analyze_file(file_path)
+                result2 = res2.to_dict()
+
+                blocks_with_insights_2 = [
+                    b for b in result2["structure"]["blocks"] if b["llm_insights"]
+                ]
                 insight2 = blocks_with_insights_2[0]["llm_insights"][0]
-                
+
                 self.assertTrue(insight2.get("cached"))
                 self.assertEqual(insight2["provider"], "librarian")
-                
+
                 # Verify LLM was NOT called again
                 self.assertEqual(llm_instance.chat.call_count, call_count_after_first)
+
 
 if __name__ == "__main__":
     unittest.main()

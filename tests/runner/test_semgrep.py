@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from src.runner.pipeline.orchestrator import Pipeline
+from src.core.pipeline.orchestrator import AnalysisOrchestrator
 from src.runner.tools.semgrep import SemgrepRunner
 
 
@@ -32,17 +32,19 @@ foo()
                 ]
             }
 
-            with patch("src.runner.pipeline.orchestrator.SemgrepRunner") as mock_runner:
+            with patch("src.core.pipeline.orchestrator.SemgrepRunner") as mock_runner:
                 mock_runner.return_value.run.return_value = mock_output
-                pipeline = Pipeline()
-                pipeline.scan_file(file_path)
+                orchestrator = AnalysisOrchestrator()
+                res = orchestrator.analyze_file(file_path)
+                result = res.to_dict()
 
-            result = pipeline.results[file_path]
             blocks = result["structure"]["blocks"]
             blocks_with_findings = [b for b in blocks if b["security_findings"]]
 
             self.assertEqual(len(blocks_with_findings), 1)
-            self.assertEqual(blocks_with_findings[0]["security_findings"][0]["check_id"], "TEST.RULE")
+            self.assertEqual(
+                blocks_with_findings[0]["security_findings"][0]["check_id"], "TEST.RULE"
+            )
             self.assertEqual(result["semgrep"]["results"][0]["check_id"], "TEST.RULE")
 
     def test_semgrep_runner_handles_missing_binary(self):

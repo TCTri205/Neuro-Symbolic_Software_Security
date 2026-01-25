@@ -1,31 +1,29 @@
 import click
 from src.core.config import settings
 
+
 @click.group()
 def cli():
     """NSSS - Neuro-Symbolic Software Security CLI"""
     pass
 
+
 @cli.command()
 @click.argument("target_path", type=click.Path(exists=True))
 @click.option(
-    "--mode", 
-    type=click.Choice(["ci", "audit", "baseline"], case_sensitive=False), 
-    default="audit", 
-    help="Operation mode."
+    "--mode",
+    type=click.Choice(["ci", "audit", "baseline"], case_sensitive=False),
+    default="audit",
+    help="Operation mode.",
 )
 @click.option(
-    "--format", 
-    "output_format", 
-    type=click.Choice(["json", "text"], case_sensitive=False), 
-    default="text", 
-    help="Output format."
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "text"], case_sensitive=False),
+    default="text",
+    help="Output format.",
 )
-@click.option(
-    "--report-dir",
-    default=".",
-    help="Directory to save reports."
-)
+@click.option("--report-dir", default=".", help="Directory to save reports.")
 def scan(target_path, mode, output_format, report_dir):
     """
     Scan a target directory or file.
@@ -35,18 +33,43 @@ def scan(target_path, mode, output_format, report_dir):
     click.echo(f"Mode: {mode}")
     click.echo(f"Format: {output_format}")
     click.echo(f"Loaded Configuration: HOST={settings.HOST}, DEBUG={settings.DEBUG}")
-    
+
     # Invoking Pipeline
-    from src.runner.pipeline import run_scan_pipeline, generate_reports
+    from src.core.pipeline.orchestrator import AnalysisOrchestrator
+    from src.report import MarkdownReporter, SarifReporter
+    import os
     import json
-    
+
     click.echo("Running analysis pipeline...")
-    results = run_scan_pipeline(target_path)
-    
+    orchestrator = AnalysisOrchestrator()
+    results = {}
+
+    if os.path.isfile(target_path):
+        res = orchestrator.analyze_file(target_path)
+        results[target_path] = res.to_dict()
+    elif os.path.isdir(target_path):
+        for root, dirs, files in os.walk(target_path):
+            for file in files:
+                if file.endswith(".py"):
+                    full_path = os.path.join(root, file)
+                    res = orchestrator.analyze_file(full_path)
+                    results[full_path] = res.to_dict()
+
     # Generate reports
-    generate_reports(results, report_dir)
-    click.echo(f"Reports generated in {report_dir}")
-    
+    click.echo(f"Generating reports in {report_dir}...")
+
+    # Markdown
+    md_reporter = MarkdownReporter()
+    md_path = os.path.join(report_dir, "nsss_report.md")
+    md_reporter.generate(results, md_path)
+
+    # SARIF
+    sarif_reporter = SarifReporter()
+    sarif_path = os.path.join(report_dir, "nsss_report.sarif")
+    sarif_reporter.generate(results, sarif_path)
+
+    click.echo(f"Reports generated.")
+
     if output_format == "json":
         click.echo(json.dumps(results, indent=2))
     else:
@@ -57,9 +80,11 @@ def scan(target_path, mode, output_format, report_dir):
                 click.echo(f"  Error: {res['error']}")
             else:
                 stats = res.get("stats", {})
-                click.echo(f"  CFG: {stats.get('block_count')} blocks, {stats.get('edge_count')} edges")
+                click.echo(
+                    f"  CFG: {stats.get('block_count')} blocks, {stats.get('edge_count')} edges"
+                )
                 click.echo(f"  Vars: {stats.get('var_count')} variables tracked")
-                
+
                 # Show first few phis as example
                 has_phis = False
                 for b in res["structure"]["blocks"]:
@@ -70,6 +95,7 @@ def scan(target_path, mode, output_format, report_dir):
                     click.echo("  No Phi nodes found.")
 
     click.echo("\nScan complete.")
+
 
 if __name__ == "__main__":
     cli()
