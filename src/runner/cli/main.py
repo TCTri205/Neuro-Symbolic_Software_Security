@@ -21,7 +21,12 @@ def cli():
     default="text", 
     help="Output format."
 )
-def scan(target_path, mode, output_format):
+@click.option(
+    "--report-dir",
+    default=".",
+    help="Directory to save reports."
+)
+def scan(target_path, mode, output_format, report_dir):
     """
     Scan a target directory or file.
     """
@@ -32,11 +37,15 @@ def scan(target_path, mode, output_format):
     click.echo(f"Loaded Configuration: HOST={settings.HOST}, DEBUG={settings.DEBUG}")
     
     # Invoking Pipeline
-    from src.runner.pipeline import run_scan_pipeline
+    from src.runner.pipeline import run_scan_pipeline, generate_reports
     import json
     
     click.echo("Running analysis pipeline...")
     results = run_scan_pipeline(target_path)
+    
+    # Generate reports
+    generate_reports(results, report_dir)
+    click.echo(f"Reports generated in {report_dir}")
     
     if output_format == "json":
         click.echo(json.dumps(results, indent=2))

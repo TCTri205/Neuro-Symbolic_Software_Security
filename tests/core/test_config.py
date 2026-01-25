@@ -30,7 +30,8 @@ def test_optional_fields():
         m.delenv("OPENAI_API_KEY", raising=False)
         m.delenv("ANTHROPIC_API_KEY", raising=False)
         
-        settings = Settings()
+        # Force ignore .env file by passing _env_file=None
+        settings = Settings(_env_file=None)
         assert settings.OPENAI_API_KEY is None or settings.OPENAI_API_KEY == "sk-placeholder" 
         # Note: If .env exists with placeholder, it might load it. 
         # Since we are testing logic, we assume clean env or handle .env presence.

@@ -8,6 +8,7 @@ from src.core.cfg.callgraph import CallGraph, CallGraphBuilder
 from src.runner.tools.semgrep import SemgrepRunner
 from src.runner.tools.llm import LLMClient
 from src.librarian import Librarian
+from src.report import MarkdownReporter, SarifReporter
 
 class Pipeline:
     def __init__(self):
@@ -121,6 +122,7 @@ class Pipeline:
             # Check Librarian for cached decision
             cached_insight = self.librarian.query(prompt)
             if cached_insight:
+                cached_insight["snippet"] = snippet
                 block.llm_insights.append(cached_insight)
                 continue
 
@@ -130,6 +132,7 @@ class Pipeline:
                 "model": client.model,
                 "response": response.get("content"),
                 "error": response.get("error"),
+                "snippet": snippet,  # Store snippet for reporting
             }
             
             # Attempt to parse JSON from content
@@ -341,3 +344,14 @@ def run_scan_pipeline(target: str) -> Dict[str, Any]:
     elif os.path.isdir(target):
         pipeline.scan_directory(target)
     return pipeline.results
+
+def generate_reports(results: Dict[str, Any], output_dir: str = ".") -> None:
+    # Markdown
+    md_reporter = MarkdownReporter()
+    md_path = os.path.join(output_dir, "nsss_report.md")
+    md_reporter.generate(results, md_path)
+    
+    # SARIF
+    sarif_reporter = SarifReporter()
+    sarif_path = os.path.join(output_dir, "nsss_report.sarif")
+    sarif_reporter.generate(results, sarif_path)

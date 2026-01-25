@@ -143,3 +143,7 @@ cython_debug/
 
 # Beads
 .beads
+
+# NSSS
+nsss_librarian.db
+*.db
