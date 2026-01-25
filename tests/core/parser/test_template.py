@@ -1,5 +1,4 @@
-import pytest
-from src.core.parser.template import TemplateParser, TemplateNode
+from src.core.parser.template import TemplateParser
 
 def test_parse_variables():
     content = """

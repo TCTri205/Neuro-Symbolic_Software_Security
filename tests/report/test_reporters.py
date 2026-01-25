@@ -1,4 +1,3 @@
-import os
 import json
 import pytest
 from src.report import MarkdownReporter, SarifReporter

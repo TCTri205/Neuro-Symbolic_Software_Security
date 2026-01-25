@@ -1,5 +1,5 @@
 import re
-from typing import List, Set
+from typing import List
 from pydantic import BaseModel, Field
 
 class TemplateNode(BaseModel):

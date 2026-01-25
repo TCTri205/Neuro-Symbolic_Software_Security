@@ -149,3 +149,7 @@ nsss_librarian.db
 *.db
 nsss_report.md
 nsss_report.sarif
+
+# CodeGraph
+.codegraph_index.json
+.codegraph_cache/
