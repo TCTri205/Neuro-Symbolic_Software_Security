@@ -14,8 +14,11 @@ class PhiNode(BaseModel):
 
 class BasicBlock(BaseModel):
     id: int
+    scope: str = "global"
     statements: List[Any] = Field(default_factory=list) # Storing AST nodes
     phi_nodes: List[PhiNode] = Field(default_factory=list)
+    security_findings: List[Dict[str, Any]] = Field(default_factory=list)
+    llm_insights: List[Dict[str, Any]] = Field(default_factory=list)
     
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

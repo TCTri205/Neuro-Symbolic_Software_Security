@@ -6,7 +6,21 @@ class Settings(BaseSettings):
     # API Configuration
     OPENAI_API_KEY: Optional[str] = Field(None, description="OpenAI API Key")
     ANTHROPIC_API_KEY: Optional[str] = Field(None, description="Anthropic API Key")
+    GEMINI_API_KEY: Optional[str] = Field(None, description="Google AI Studio (Gemini) API Key")
     NGROK_AUTH_TOKEN: Optional[str] = Field(None, description="Ngrok Auth Token")
+
+    # LLM Configuration
+    LLM_PROVIDER: str = Field("openai", description="LLM provider: openai | gemini")
+    LLM_FALLBACK_PROVIDER: Optional[str] = Field(None, description="Fallback provider if primary fails")
+    LLM_MODEL: Optional[str] = Field(None, description="LLM model name")
+    OPENAI_BASE_URL: Optional[str] = Field(None, description="OpenAI base URL override")
+    GEMINI_BASE_URL: Optional[str] = Field(None, description="Gemini base URL override")
+    
+    # Multiple API Keys for rotation
+    OPENAI_API_KEY_2: Optional[str] = Field(None, description="OpenAI API Key (backup 2)")
+    OPENAI_API_KEY_3: Optional[str] = Field(None, description="OpenAI API Key (backup 3)")
+    GEMINI_API_KEY_2: Optional[str] = Field(None, description="Gemini API Key (backup 2)")
+    GEMINI_API_KEY_3: Optional[str] = Field(None, description="Gemini API Key (backup 3)")
 
     # Server Configuration
     HOST: str = Field("0.0.0.0", description="Server Host")

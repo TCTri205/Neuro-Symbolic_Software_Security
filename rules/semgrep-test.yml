@@ -1,0 +1,6 @@
+rules:
+  - id: nsss.test.eval
+    languages: [python]
+    message: Avoid eval() usage
+    severity: WARNING
+    pattern: eval($X)

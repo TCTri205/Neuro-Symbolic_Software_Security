@@ -6,15 +6,19 @@ class CFGBuilder(ast.NodeVisitor):
         self.cfg: ControlFlowGraph = None
         self.current_block: BasicBlock = None
         self.counter = 0
+        self.current_scope = "global"
+        self.root_node = None
         
     def _new_block(self) -> BasicBlock:
         self.counter += 1
-        block = BasicBlock(id=self.counter)
+        block = BasicBlock(id=self.counter, scope=self.current_scope)
         self.cfg.add_block(block)
         return block
 
     def build(self, name: str, node: ast.AST) -> ControlFlowGraph:
         self.cfg = ControlFlowGraph(name)
+        self.current_scope = name # Set scope to module name
+        self.root_node = node
         self.entry_block = self._new_block()
         self.cfg.entry_block = self.entry_block
         self.current_block = self.entry_block
@@ -26,26 +30,67 @@ class CFGBuilder(ast.NodeVisitor):
         return self.cfg
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
-        # Handle arguments as assignments in the entry block
+        # Save outer context
+        outer_block = self.current_block
+        previous_scope = self.current_scope
+        
+        # Switch to function scope
+        self.current_scope = node.name
+        
+        # Create isolated entry block for the function
+        func_entry = self._new_block()
+        
+        # Special case: If this function IS the root node being built (e.g. for unit tests),
+        # we treat it as the entry point of execution and link it.
+        if node is self.root_node and outer_block:
+            self.cfg.add_edge(outer_block.id, func_entry.id, label="Entry")
+            
+        self.current_block = func_entry
+        
+        # Handle arguments
         if node.args.args:
             for arg in node.args.args:
-                # Treat argument as an assignment: arg.arg = <param>
-                # We store the arg node itself as a statement representing definition
                 self.current_block.add_statement(arg)
                 
-        # In this simplified builder, we assume we are building CFG for the function body
-        # If the input node IS a FunctionDef, we process its body
+        # Process body
+        for stmt in node.body:
+            self.visit(stmt)
+            
+        # Restore outer context
+        self.current_scope = previous_scope
+        
+        # Continue flow in outer scope
+        post_def_block = self._new_block()
+        if outer_block:
+             self.cfg.add_edge(outer_block.id, post_def_block.id, label="Next")
+        self.current_block = post_def_block
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        outer_block = self.current_block
+        previous_scope = self.current_scope
+        
+        self.current_scope = node.name
+        
+        func_entry = self._new_block()
+        
+        if node is self.root_node and outer_block:
+            self.cfg.add_edge(outer_block.id, func_entry.id, label="Entry")
+            
+        self.current_block = func_entry
+        
+        if node.args.args:
+            for arg in node.args.args:
+                self.current_block.add_statement(arg)
+                
         for stmt in node.body:
             self.visit(stmt)
 
-    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
-        # Similar to FunctionDef
-        if node.args.args:
-            for arg in node.args.args:
-                self.current_block.add_statement(arg)
-                
-        for stmt in node.body:
-            self.visit(stmt)
+        self.current_scope = previous_scope
+        
+        post_def_block = self._new_block()
+        if outer_block:
+             self.cfg.add_edge(outer_block.id, post_def_block.id, label="Next")
+        self.current_block = post_def_block
 
     def visit_Module(self, node: ast.Module):
         # Similar to FunctionDef, process body
