@@ -74,3 +74,28 @@ print(x)
 def import_nx():
     import networkx as nx
     return nx
+
+def test_async_flow():
+    code = """
+async def foo():
+    async for x in iter:
+        await process(x)
+"""
+    # Note: ast.parse works fine with async syntax in Py3.
+    tree = ast.parse(code)
+    builder = CFGBuilder()
+    cfg = builder.build("test_async", tree)
+    
+    # Check for loop cycle from async for
+    import networkx as nx
+    cycles = list(nx.simple_cycles(cfg.graph))
+    assert len(cycles) > 0
+    
+    # Check for await expression
+    found_await = False
+    for block in cfg._blocks.values():
+        for stmt in block.statements:
+            # Depending on python version, await might be Expr(value=Await(...))
+            if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Await):
+                found_await = True
+    assert found_await

@@ -26,8 +26,24 @@ class CFGBuilder(ast.NodeVisitor):
         return self.cfg
 
     def visit_FunctionDef(self, node: ast.FunctionDef):
+        # Handle arguments as assignments in the entry block
+        if node.args.args:
+            for arg in node.args.args:
+                # Treat argument as an assignment: arg.arg = <param>
+                # We store the arg node itself as a statement representing definition
+                self.current_block.add_statement(arg)
+                
         # In this simplified builder, we assume we are building CFG for the function body
         # If the input node IS a FunctionDef, we process its body
+        for stmt in node.body:
+            self.visit(stmt)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef):
+        # Similar to FunctionDef
+        if node.args.args:
+            for arg in node.args.args:
+                self.current_block.add_statement(arg)
+                
         for stmt in node.body:
             self.visit(stmt)
 
@@ -110,6 +126,27 @@ class CFGBuilder(ast.NodeVisitor):
         
         # Represent the iterator logic
         header_block.add_statement(node.target) # roughly
+        header_block.add_statement(node.iter)
+        
+        body_block = self._new_block()
+        exit_block = self._new_block()
+        
+        self.cfg.add_edge(header_block.id, body_block.id, label="Next")
+        self.cfg.add_edge(header_block.id, exit_block.id, label="Stop")
+        
+        self.current_block = body_block
+        for stmt in node.body:
+            self.visit(stmt)
+            
+        self.cfg.add_edge(self.current_block.id, header_block.id)
+        self.current_block = exit_block
+
+    def visit_AsyncFor(self, node: ast.AsyncFor):
+        # Same structure as For
+        header_block = self._new_block()
+        self.cfg.add_edge(self.current_block.id, header_block.id)
+        
+        header_block.add_statement(node.target)
         header_block.add_statement(node.iter)
         
         body_block = self._new_block()

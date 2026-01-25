@@ -1,19 +1,32 @@
 import ast
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 from pydantic import BaseModel, Field, ConfigDict
 import networkx as nx
+
+class PhiNode(BaseModel):
+    var_name: str
+    result: str  # The new version, e.g., "x_3"
+    operands: Dict[int, str] = Field(default_factory=dict) # block_id -> version, e.g. {1: "x_1", 2: "x_2"}
+
+    def __repr__(self):
+        args = ", ".join(f"B{k}:{v}" for k, v in self.operands.items())
+        return f"{self.result} = phi({args})"
 
 class BasicBlock(BaseModel):
     id: int
     statements: List[Any] = Field(default_factory=list) # Storing AST nodes
+    phi_nodes: List[PhiNode] = Field(default_factory=list)
     
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     def add_statement(self, stmt: ast.AST):
         self.statements.append(stmt)
     
+    def add_phi(self, phi: PhiNode):
+        self.phi_nodes.append(phi)
+    
     def __repr__(self):
-        return f"Block(id={self.id}, stmts={len(self.statements)})"
+        return f"Block(id={self.id}, stmts={len(self.statements)}, phis={len(self.phi_nodes)})"
 
 class ControlFlowGraph:
     def __init__(self, name: str):

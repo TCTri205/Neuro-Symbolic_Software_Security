@@ -32,11 +32,36 @@ def scan(target_path, mode, output_format):
     click.echo(f"Format: {output_format}")
     click.echo(f"Loaded Configuration: HOST={settings.HOST}, DEBUG={settings.DEBUG}")
     
-    # Placeholder for actual scan logic invocation
-    # from src.runner.pipeline import run_scan
-    # run_scan(target_path, mode, output_format)
+    # Invoking Pipeline
+    from src.runner.pipeline import run_scan_pipeline
+    import json
     
-    click.echo("Scan complete (Simulation).")
+    click.echo("Running analysis pipeline...")
+    results = run_scan_pipeline(target_path)
+    
+    if output_format == "json":
+        click.echo(json.dumps(results, indent=2))
+    else:
+        # Text summary
+        for file, res in results.items():
+            click.echo(f"\nFile: {file}")
+            if "error" in res:
+                click.echo(f"  Error: {res['error']}")
+            else:
+                stats = res.get("stats", {})
+                click.echo(f"  CFG: {stats.get('block_count')} blocks, {stats.get('edge_count')} edges")
+                click.echo(f"  Vars: {stats.get('var_count')} variables tracked")
+                
+                # Show first few phis as example
+                has_phis = False
+                for b in res["structure"]["blocks"]:
+                    if b["phis"]:
+                        click.echo(f"  Block {b['id']} Phis: {b['phis']}")
+                        has_phis = True
+                if not has_phis:
+                    click.echo("  No Phi nodes found.")
+
+    click.echo("\nScan complete.")
 
 if __name__ == "__main__":
     cli()
