@@ -1,8 +1,8 @@
 import ast
 import networkx as nx
-from typing import Dict, Set, List, DefaultDict, Any
+from typing import Dict, Set, List, DefaultDict
 from collections import defaultdict
-from ..models import ControlFlowGraph, BasicBlock, PhiNode
+from ..models import ControlFlowGraph, PhiNode
 
 class SSATransformer:
     def __init__(self, cfg: ControlFlowGraph):

@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+import json
 from unittest.mock import patch
 
 from src.runner.pipeline.orchestrator import Pipeline
@@ -60,6 +61,75 @@ foo()
                     if message.get("role") == "user"
                 )
             )
+
+    def test_remediation_requested_and_stored(self):
+        code = """
+def insecure():
+    eval("1+1")
+"""
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            file_path = os.path.join(tmp_dir, "vulnerable.py")
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(code)
+
+            mock_semgrep = {
+                "results": [
+                    {
+                        "check_id": "python.lang.security.audit.eval-detected.eval-detected",
+                        "path": file_path,
+                        "start": {"line": 3, "col": 5},
+                        "extra": {"message": "eval detected", "severity": "WARNING"},
+                    }
+                ]
+            }
+
+            mock_llm_response = {
+                "content": json.dumps({
+                    "analysis": [
+                        {
+                            "check_id": "python.lang.security.audit.eval-detected.eval-detected",
+                            "verdict": "true positive",
+                            "rationale": "eval is dangerous",
+                            "remediation": "Use ast.literal_eval"
+                        }
+                    ]
+                })
+            }
+
+            with patch("src.runner.pipeline.orchestrator.SemgrepRunner") as mock_runner, patch(
+                "src.runner.pipeline.orchestrator.LLMClient"
+            ) as mock_llm:
+                mock_runner.return_value.run.return_value = mock_semgrep
+
+                llm_instance = mock_llm.return_value
+                llm_instance.is_configured = True
+                llm_instance.provider = "openai"
+                llm_instance.model = "gpt-4o"
+                llm_instance.chat.return_value = mock_llm_response
+
+                pipeline = Pipeline()
+                pipeline.scan_file(file_path)
+
+            result = pipeline.results[file_path]
+            blocks = result["structure"]["blocks"]
+            blocks_with_findings = [b for b in blocks if b["security_findings"]]
+            self.assertEqual(len(blocks_with_findings), 1)
+            
+            # Check prompt contains "remediation"
+            args, _ = llm_instance.chat.call_args
+            messages = args[0]
+            user_msg = next(m["content"] for m in messages if m["role"] == "user")
+            self.assertIn("Provide a concise rationale and a specific code remediation", user_msg)
+            self.assertIn("'remediation'", user_msg)
+
+            # Check result stored and parsed
+            insight = blocks_with_findings[0]["llm_insights"][0]
+            self.assertEqual(insight["response"], mock_llm_response["content"])
+            
+            # Verify parsing
+            self.assertIn("analysis", insight)
+            self.assertEqual(len(insight["analysis"]), 1)
+            self.assertEqual(insight["analysis"][0]["remediation"], "Use ast.literal_eval")
 
 
 if __name__ == "__main__":

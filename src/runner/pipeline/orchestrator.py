@@ -122,6 +122,30 @@ class Pipeline:
                 "response": response.get("content"),
                 "error": response.get("error"),
             }
+            
+            # Attempt to parse JSON from content
+            content = response.get("content")
+            if content:
+                try:
+                    # Strip markdown code blocks
+                    clean_content = content.strip()
+                    if clean_content.startswith("```json"):
+                        clean_content = clean_content[7:]
+                    elif clean_content.startswith("```"):
+                        clean_content = clean_content[3:]
+                    
+                    if clean_content.endswith("```"):
+                        clean_content = clean_content[:-3]
+                    
+                    clean_content = clean_content.strip()
+                    
+                    parsed = json.loads(clean_content)
+                    if isinstance(parsed, dict) and "analysis" in parsed:
+                        insight["analysis"] = parsed["analysis"]
+                except Exception:
+                    # Failed to parse, valid JSON might not be returned
+                    pass
+
             if "status" in response:
                 insight["status"] = response["status"]
             if "body" in response:
@@ -161,9 +185,9 @@ class Pipeline:
         ssa_summary = json.dumps(ssa_context, indent=2)
         message = (
             "You are a security analyst. For each finding, determine whether it is a true positive, "
-            "false positive, or needs review. Provide a concise rationale. "
+            "false positive, or needs review. Provide a concise rationale and a specific code remediation.\n"
             "Respond in JSON with an array under key 'analysis', each item containing 'check_id', "
-            "'verdict', and 'rationale'.\n\n"
+            "'verdict', 'rationale', and 'remediation'.\n\n"
             f"File: {file_path}\n"
             f"Block scope: {block.scope}\n"
             f"Block id: {block.id}\n\n"
@@ -217,6 +241,29 @@ class Pipeline:
     def _build_ssa_context(self, block, ssa) -> Dict[str, Any]:
         defs = set()
         uses = set()
+        
+        # Filter for variables involved in the findings
+        relevant_lines = {f.get("line") for f in block.security_findings if f.get("line")}
+        relevant_vars = set()
+
+        if relevant_lines:
+            for stmt in block.statements:
+                start = getattr(stmt, "lineno", None)
+                if start is None:
+                    continue
+                end = getattr(stmt, "end_lineno", start)
+                
+                # Check if statement overlaps with any finding line
+                if any(start <= line <= end for line in relevant_lines):
+                    for node in ast.walk(stmt):
+                        if isinstance(node, ast.Name):
+                            version = ssa.ssa_map.get(node)
+                            if version:
+                                relevant_vars.add((node.id, version))
+                        elif isinstance(node, ast.arg):
+                            version = ssa.ssa_map.get(node)
+                            if version:
+                                relevant_vars.add((node.arg, version))
 
         for stmt in block.statements:
             for node in ast.walk(stmt):
@@ -224,7 +271,13 @@ class Pipeline:
                     version = ssa.ssa_map.get(node)
                     if not version:
                         continue
+                    
                     entry = (node.id, version)
+                    # Filter: Only include if relevant (or if no relevant vars found, fallback to all?)
+                    # Let's strict filter if relevant_vars is populated.
+                    if relevant_vars and entry not in relevant_vars:
+                        continue
+                        
                     if isinstance(node.ctx, ast.Store):
                         defs.add(entry)
                     else:
@@ -232,14 +285,18 @@ class Pipeline:
                 elif isinstance(node, ast.arg):
                     version = ssa.ssa_map.get(node)
                     if version:
-                        defs.add((node.arg, version))
+                        entry = (node.arg, version)
+                        if relevant_vars and entry not in relevant_vars:
+                            continue
+                        defs.add(entry)
 
         phi_nodes = [str(p) for p in block.phi_nodes]
-        return {
+        context = {
             "phi_nodes": phi_nodes,
             "defs": [{"name": name, "version": version} for name, version in sorted(defs)],
             "uses": [{"name": name, "version": version} for name, version in sorted(uses)],
         }
+        return context
 
     def _find_block_by_line(self, cfg, line: int) -> Optional[Any]:
         for block in cfg._blocks.values():

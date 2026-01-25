@@ -1,5 +1,4 @@
 import click
-import sys
 from src.core.config import settings
 
 @click.group()
@@ -26,7 +25,7 @@ def scan(target_path, mode, output_format):
     """
     Scan a target directory or file.
     """
-    click.echo(f"Initializing NSSS Scan...")
+    click.echo("Initializing NSSS Scan...")
     click.echo(f"Target: {target_path}")
     click.echo(f"Mode: {mode}")
     click.echo(f"Format: {output_format}")

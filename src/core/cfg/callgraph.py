@@ -1,7 +1,7 @@
 import ast
 import networkx as nx
-from typing import Dict, List, Set, Any, Optional
-from .models import ControlFlowGraph, BasicBlock
+from typing import Dict, List, Set
+from .models import ControlFlowGraph
 
 class CallGraph:
     """
@@ -117,7 +117,7 @@ class CallGraphBuilder:
             elif call["kind"] == "method":
                 # Method call - Check for Speculative Dispatch
                 method_name = call["name"]
-                base_obj = call["base"]
+                # base_obj = call["base"]  # Unused for now
                 
                 # If we knew the type of base_obj, we could be specific.
                 # For now, we use the Speculative Expansion logic:

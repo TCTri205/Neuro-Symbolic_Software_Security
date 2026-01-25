@@ -1,7 +1,7 @@
 import json
 import os
 import subprocess
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 
 class SemgrepRunner:

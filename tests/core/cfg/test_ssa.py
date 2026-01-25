@@ -1,5 +1,4 @@
 import ast
-import pytest
 from src.core.cfg.builder import CFGBuilder
 from src.core.cfg.ssa.transformer import SSATransformer
 

@@ -1,5 +1,5 @@
 from click.testing import CliRunner
-from src.runner.cli.main import cli, scan
+from src.runner.cli.main import cli
 
 def test_scan_command_basic():
     runner = CliRunner()
