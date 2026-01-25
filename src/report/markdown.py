@@ -23,28 +23,49 @@ class MarkdownReporter(BaseReporter):
             blocks = structure.get("blocks", [])
             
             for block in blocks:
-                # We care about blocks that have LLM insights (which implies they had findings)
+                # Get raw findings and insights
+                security_findings = block.get("security_findings", [])
                 llm_insights = block.get("llm_insights", [])
                 
-                for insight in llm_insights:
-                    # Each insight might contain multiple analysis items (one per finding usually)
-                    analysis_list = insight.get("analysis", [])
-                    if not analysis_list:
-                        # Fallback if analysis is missing but we have response text
-                        pass
+                # Create a map of insights by check_id (if possible) or just process list
+                # Since LLM insights are usually 1-to-1 or 1-to-many with findings, 
+                # but the current structure appends a single insight object per LLM call.
+                # If LLM ran, we use its output. If not, we use raw findings.
+                
+                if llm_insights:
+                    for insight in llm_insights:
+                        # Each insight might contain multiple analysis items
+                        analysis_list = insight.get("analysis", [])
+                        snippet = insight.get("snippet", "")
                         
-                    snippet = insight.get("snippet", "")
-                    
-                    for item in analysis_list:
-                        verdict = item.get("verdict", "Unknown")
-                        # Only report actionable findings or everything? Let's report everything but highlight True Positives.
-                        
+                        if not analysis_list:
+                             continue
+
+                        for item in analysis_list:
+                            verdict = item.get("verdict", "Unknown")
+                            verdict_norm = verdict.lower().replace("_", " ")
+                            
+                            finding_detail = {
+                                "check_id": item.get("check_id", "Unknown"),
+                                "verdict": verdict,
+                                "verdict_norm": verdict_norm,
+                                "rationale": item.get("rationale", "No rationale provided."),
+                                "remediation": item.get("remediation", "No remediation provided."),
+                                "snippet": snippet,
+                                "block_id": block.get("id"),
+                                "scope": block.get("scope")
+                            }
+                            file_findings.append(finding_detail)
+                elif security_findings:
+                    # Fallback to raw findings if no LLM analysis
+                    for finding in security_findings:
                         finding_detail = {
-                            "check_id": item.get("check_id", "Unknown"),
-                            "verdict": verdict,
-                            "rationale": item.get("rationale", "No rationale provided."),
-                            "remediation": item.get("remediation", "No remediation provided."),
-                            "snippet": snippet,
+                            "check_id": finding.get("check_id", "Unknown"),
+                            "verdict": "Unverified (Static Analysis)",
+                            "verdict_norm": "unverified",
+                            "rationale": finding.get("message", "No message provided."),
+                            "remediation": "No remediation available (LLM disabled).",
+                            "snippet": "", 
                             "block_id": block.get("id"),
                             "scope": block.get("scope")
                         }
@@ -55,7 +76,7 @@ class MarkdownReporter(BaseReporter):
                 content.append(f"## File: `{file_path}`\n")
                 
                 for i, f in enumerate(file_findings, 1):
-                    icon = "🔴" if f["verdict"].lower() == "true positive" else "⚪"
+                    icon = "🔴" if "true positive" in f["verdict_norm"] else "⚪"
                     content.append(f"### {i}. {f['check_id']} {icon}")
                     content.append(f"**Verdict**: {f['verdict']}")
                     content.append(f"**Scope**: `{f['scope']}` (Block {f['block_id']})")

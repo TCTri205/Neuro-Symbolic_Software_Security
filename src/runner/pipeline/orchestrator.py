@@ -207,8 +207,11 @@ class Pipeline:
         message = (
             "You are a security analyst. For each finding, determine whether it is a true positive, "
             "false positive, or needs review. Provide a concise rationale and a specific code remediation.\n"
-            "Respond in JSON with an array under key 'analysis', each item containing 'check_id', "
-            "'verdict', 'rationale', and 'remediation'.\n\n"
+            "Respond in JSON with an array under key 'analysis', each item containing:\n"
+            "- 'check_id': The exact rule ID from the findings.\n"
+            "- 'verdict': One of ['True Positive', 'False Positive', 'Needs Review'].\n"
+            "- 'rationale': A brief explanation of why this is a vulnerability or false alarm.\n"
+            "- 'remediation': A specific code snippet to fix the issue. Do NOT use markdown code blocks in this field.\n\n"
             f"File: {file_path}\n"
             f"Block scope: {block.scope}\n"
             f"Block id: {block.id}\n\n"

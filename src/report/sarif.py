@@ -21,98 +21,78 @@ class SarifReporter(BaseReporter):
                 security_findings = block.get("security_findings", [])
                 llm_insights = block.get("llm_insights", [])
                 
-                # Create a map of check_id -> [findings] for easy lookup of location
-                findings_map = {}
-                for finding in security_findings:
-                    cid = finding.get("check_id")
-                    if cid:
-                        if cid not in findings_map:
-                            findings_map[cid] = []
-                        findings_map[cid].append(finding)
-
-                # Process insights
+                # Build a lookup for insights: check_id -> insight_item
+                # Note: This assumes one insight per check_id per block, which is reasonable for now.
+                insight_map = {}
                 for insight in llm_insights:
-                    analysis_list = insight.get("analysis", [])
-                    for item in analysis_list:
-                        check_id = item.get("check_id")
-                        verdict = item.get("verdict", "needs_review").lower()
-                        rationale = item.get("rationale", "")
-                        remediation = item.get("remediation", "")
-                        
-                        # Determine level based on verdict
-                        if "true positive" in verdict:
-                            level = "error"
-                        elif "false positive" in verdict:
-                            # In SARIF, FPs are often suppressed or marked as 'none'/'note'
-                            # We will log them as 'note' but maybe we should exclude them?
-                            # Let's keep them as 'note' with specific kind.
-                            level = "note"
-                        else:
-                            level = "warning"
+                    for item in insight.get("analysis", []):
+                        cid = item.get("check_id")
+                        if cid:
+                            insight_map[cid] = item
 
-                        # Register rule if new
-                        if check_id and check_id not in rules:
-                            rules[check_id] = {
-                                "id": check_id,
-                                "shortDescription": {
-                                    "text": f"Security check {check_id}"
-                                },
-                                "helpUri": f"https://semgrep.dev/r/{check_id}" if "semgrep" in str(check_id).lower() else None
+                for finding in security_findings:
+                    check_id = finding.get("check_id")
+                    if not check_id:
+                        continue
+                        
+                    # Enrich with insight if available
+                    insight_item = insight_map.get(check_id)
+                    
+                    if insight_item:
+                        verdict = insight_item.get("verdict", "needs_review").lower()
+                        rationale = insight_item.get("rationale", "")
+                        remediation = insight_item.get("remediation", "")
+                    else:
+                        verdict = "unverified"
+                        rationale = finding.get("message", "Detected by static analysis.")
+                        remediation = "LLM analysis skipped."
+                    
+                    # Determine level based on verdict
+                    if "true positive" in verdict:
+                        level = "error"
+                    elif "false positive" in verdict:
+                        level = "note"
+                    elif "unverified" in verdict:
+                        level = "warning"
+                    else:
+                        level = "warning"
+
+                    # Register rule if new
+                    if check_id not in rules:
+                        rules[check_id] = {
+                            "id": check_id,
+                            "shortDescription": {
+                                "text": f"Security check {check_id}"
+                            },
+                            "helpUri": f"https://semgrep.dev/r/{check_id}" if "semgrep" in str(check_id).lower() else None
+                        }
+
+                    # Construct Location
+                    loc = {
+                        "physicalLocation": {
+                            "artifactLocation": {
+                                "uri": file_path.replace("\\", "/") 
+                            },
+                            "region": {
+                                "startLine": finding.get("line", 1),
+                                "startColumn": finding.get("column", 1)
                             }
+                        }
+                    }
 
-                        # Find locations
-                        related_findings = findings_map.get(check_id, [])
-                        
-                        # If we have locations, create a result for each (or aggregate?)
-                        # Typically one analysis result -> one SARIF result per location.
-                        
-                        locations = []
-                        if related_findings:
-                            for f in related_findings:
-                                loc = {
-                                    "physicalLocation": {
-                                        "artifactLocation": {
-                                            "uri": file_path.replace("\\", "/") # SARIF prefers forward slashes
-                                        },
-                                        "region": {
-                                            "startLine": f.get("line", 1),
-                                            "startColumn": f.get("column", 1)
-                                        }
-                                    }
-                                }
-                                locations.append(loc)
-                        else:
-                            # Fallback if no specific line found but analysis exists for block
-                            locations.append({
-                                "physicalLocation": {
-                                    "artifactLocation": {
-                                        "uri": file_path.replace("\\", "/")
-                                    },
-                                    "region": {
-                                        "startLine": 1 # Fallback
-                                    }
-                                }
-                            })
-
-                        # Construct SARIF result
-                        # If there are multiple locations for the same check in the same block, 
-                        # we can either emit multiple results or one result with multiple locations.
-                        # Usually it's better to emit one result per location if they are distinct occurrences.
-                        
-                        for loc in locations:
-                            result = {
-                                "ruleId": check_id,
-                                "level": level,
-                                "message": {
-                                    "text": f"{verdict.title()}: {rationale}\n\nRemediation:\n{remediation}"
-                                },
-                                "locations": [loc],
-                                "properties": {
-                                    "verdict": verdict,
-                                    "remediation": remediation
-                                }
-                            }
-                            sarif_results.append(result)
+                    result = {
+                        "ruleId": check_id,
+                        "level": level,
+                        "message": {
+                            "text": f"{verdict.title()}: {rationale}\n\nRemediation:\n{remediation}"
+                        },
+                        "locations": [loc],
+                        "properties": {
+                            "verdict": verdict,
+                            "remediation": remediation
+                        }
+                    }
+                    sarif_results.append(result)
 
         tool_component = {
             "name": "Neuro-Symbolic Software Security",

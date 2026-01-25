@@ -1,0 +1,110 @@
+rules:
+  - id: nsss.python.owasp.a01.sql-injection
+    languages: [python]
+    message: |
+      Possible SQL Injection detected. String interpolation or concatenation 
+      used in SQL query construction. Use parameterized queries instead.
+    severity: ERROR
+    metadata:
+      owasp: "A01:2021 - Broken Access Control / Injection"
+      cwe: "CWE-89"
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $CURSOR.execute("..." % $VAR)
+          - pattern: |
+              $CURSOR.execute(f"...")
+          - pattern: |
+              $CURSOR.execute("..." + $VAR)
+          - pattern: |
+              $SQL = "..." % $VAR
+              ...
+              $CURSOR.execute($SQL)
+          - pattern: |
+              $SQL = f"..."
+              ...
+              $CURSOR.execute($SQL)
+
+  - id: nsss.python.owasp.a01.command-injection
+    languages: [python]
+    message: |
+      Possible Command Injection. 'shell=True' or usage of raw command execution 
+      detected with untrusted input. Use 'subprocess.run' with 'shell=False' 
+      and pass args as a list.
+    severity: ERROR
+    metadata:
+      owasp: "A01:2021 - Broken Access Control / Injection"
+      cwe: "CWE-78"
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.call(..., shell=True)
+          - pattern: subprocess.check_call(..., shell=True)
+          - pattern: subprocess.check_output(..., shell=True)
+          - pattern: subprocess.run(..., shell=True)
+          - pattern: subprocess.Popen(..., shell=True)
+          - pattern: os.system(...)
+          - pattern: os.popen(...)
+
+  - id: nsss.python.owasp.a02.weak-crypto
+    languages: [python]
+    message: |
+      Weak hashing algorithm detected (MD5/SHA1). These are susceptible to 
+      collision attacks. Use SHA-256 or stronger (e.g., hashlib.sha256).
+    severity: WARNING
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-327"
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+          - pattern: Crypto.Hash.MD5.new(...)
+          - pattern: Crypto.Hash.SHA.new(...)
+
+  - id: nsss.python.owasp.a02.hardcoded-secret
+    languages: [python]
+    message: |
+      Potential hardcoded secret assigned to variable containing 'api_key', 'token', 
+      or 'password'. Use environment variables or a secret management system.
+    severity: WARNING
+    metadata:
+      owasp: "A02:2021 - Cryptographic Failures"
+      cwe: "CWE-798"
+    patterns:
+      - pattern: $VAR = "..."
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i)(api_key|api_token|secret_key|password|passwd|auth_token)
+
+  - id: nsss.python.owasp.a03.insecure-deserialization
+    languages: [python]
+    message: |
+      Unsafe deserialization detected. pickle/yaml.load can execute arbitrary code. 
+      Use yaml.safe_load or verify input signatures before unpickling.
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      cwe: "CWE-502"
+    patterns:
+      - pattern-either:
+          - pattern: pickle.load(...)
+          - pattern: pickle.loads(...)
+          - pattern: _pickle.load(...)
+          - pattern: _pickle.loads(...)
+          - pattern: yaml.load(...)
+          - pattern: dill.load(...)
+          - pattern: dill.loads(...)
+
+  - id: nsss.python.owasp.a04.debug-enabled
+    languages: [python]
+    message: |
+      Application running with debug=True. This can expose sensitive stack traces 
+      and configuration info. Ensure debug is False in production.
+    severity: ERROR
+    metadata:
+      owasp: "A04:2021 - Insecure Design"
+      cwe: "CWE-489"
+    patterns:
+      - pattern-either:
+          - pattern: $APP.run(..., debug=True, ...)
+          - pattern: $APP.run(..., debug=1, ...)

@@ -1,0 +1,228 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Neuro-Symbolic Software Security",
+          "version": "1.0.0",
+          "rules": [
+            {
+              "id": "rules.nsss.python.owasp.a02.hardcoded-secret",
+              "shortDescription": {
+                "text": "Security check rules.nsss.python.owasp.a02.hardcoded-secret"
+              },
+              "helpUri": null
+            },
+            {
+              "id": "rules.nsss.python.owasp.a02.weak-crypto",
+              "shortDescription": {
+                "text": "Security check rules.nsss.python.owasp.a02.weak-crypto"
+              },
+              "helpUri": null
+            },
+            {
+              "id": "rules.nsss.python.owasp.a01.sql-injection",
+              "shortDescription": {
+                "text": "Security check rules.nsss.python.owasp.a01.sql-injection"
+              },
+              "helpUri": null
+            },
+            {
+              "id": "rules.nsss.python.owasp.a01.command-injection",
+              "shortDescription": {
+                "text": "Security check rules.nsss.python.owasp.a01.command-injection"
+              },
+              "helpUri": null
+            },
+            {
+              "id": "rules.nsss.python.owasp.a03.insecure-deserialization",
+              "shortDescription": {
+                "text": "Security check rules.nsss.python.owasp.a03.insecure-deserialization"
+              },
+              "helpUri": null
+            },
+            {
+              "id": "rules.nsss.python.owasp.a04.debug-enabled",
+              "shortDescription": {
+                "text": "Security check rules.nsss.python.owasp.a04.debug-enabled"
+              },
+              "helpUri": null
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "rules.nsss.python.owasp.a02.hardcoded-secret",
+          "level": "error",
+          "message": {
+            "text": "True Positive: The API_KEY variable contains a hardcoded secret, which poses a security risk as it can be easily exposed in version control or logs.\n\nRemediation:\nimport os\nAPI_KEY = os.getenv('API_KEY')"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "benchmarks/vulnerable_flask_app/app.py"
+                },
+                "region": {
+                  "startLine": 12,
+                  "startColumn": 1
+                }
+              }
+            }
+          ],
+          "properties": {
+            "verdict": "true positive",
+            "remediation": "import os\nAPI_KEY = os.getenv('API_KEY')"
+          }
+        },
+        {
+          "ruleId": "rules.nsss.python.owasp.a02.weak-crypto",
+          "level": "error",
+          "message": {
+            "text": "True Positive: MD5 is a weak hashing algorithm that is vulnerable to collision attacks. It should not be used for hashing passwords.\n\nRemediation:\nhashed_password = hashlib.sha256(password.encode()).hexdigest()"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "benchmarks/vulnerable_flask_app/app.py"
+                },
+                "region": {
+                  "startLine": 29,
+                  "startColumn": 23
+                }
+              }
+            }
+          ],
+          "properties": {
+            "verdict": "true positive",
+            "remediation": "hashed_password = hashlib.sha256(password.encode()).hexdigest()"
+          }
+        },
+        {
+          "ruleId": "rules.nsss.python.owasp.a01.sql-injection",
+          "level": "error",
+          "message": {
+            "text": "True Positive: The use of string interpolation in the SQL query construction makes it susceptible to SQL injection attacks. Parameterized queries should be used instead.\n\nRemediation:\ncursor.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, hashed_password))"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "benchmarks/vulnerable_flask_app/app.py"
+                },
+                "region": {
+                  "startLine": 35,
+                  "startColumn": 5
+                }
+              }
+            }
+          ],
+          "properties": {
+            "verdict": "true positive",
+            "remediation": "cursor.execute('SELECT * FROM users WHERE username = ? AND password = ?', (username, hashed_password))"
+          }
+        },
+        {
+          "ruleId": "rules.nsss.python.owasp.a01.command-injection",
+          "level": "error",
+          "message": {
+            "text": "True Positive: The use of 'shell=True' with untrusted input (target) allows for command injection, which can lead to arbitrary command execution.\n\nRemediation:\noutput = subprocess.check_output(['ping', '-c', '1', target])"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "benchmarks/vulnerable_flask_app/app.py"
+                },
+                "region": {
+                  "startLine": 54,
+                  "startColumn": 14
+                }
+              }
+            }
+          ],
+          "properties": {
+            "verdict": "true positive",
+            "remediation": "output = subprocess.check_output(['ping', '-c', '1', target])"
+          }
+        },
+        {
+          "ruleId": "rules.nsss.python.owasp.a03.insecure-deserialization",
+          "level": "warning",
+          "message": {
+            "text": "Unverified: Unsafe deserialization detected. pickle/yaml.load can execute arbitrary code. \nUse yaml.safe_load or verify input signatures before unpickling.\n\n\nRemediation:\nLLM analysis skipped."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "benchmarks/vulnerable_flask_app/app.py"
+                },
+                "region": {
+                  "startLine": 70,
+                  "startColumn": 16
+                }
+              }
+            }
+          ],
+          "properties": {
+            "verdict": "unverified",
+            "remediation": "LLM analysis skipped."
+          }
+        },
+        {
+          "ruleId": "rules.nsss.python.owasp.a03.insecure-deserialization",
+          "level": "warning",
+          "message": {
+            "text": "Unverified: Unsafe deserialization detected. pickle/yaml.load can execute arbitrary code. \nUse yaml.safe_load or verify input signatures before unpickling.\n\n\nRemediation:\nLLM analysis skipped."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "benchmarks/vulnerable_flask_app/app.py"
+                },
+                "region": {
+                  "startLine": 80,
+                  "startColumn": 19
+                }
+              }
+            }
+          ],
+          "properties": {
+            "verdict": "unverified",
+            "remediation": "LLM analysis skipped."
+          }
+        },
+        {
+          "ruleId": "rules.nsss.python.owasp.a04.debug-enabled",
+          "level": "warning",
+          "message": {
+            "text": "Unverified: Application running with debug=True. This can expose sensitive stack traces \nand configuration info. Ensure debug is False in production.\n\n\nRemediation:\nLLM analysis skipped."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "benchmarks/vulnerable_flask_app/app.py"
+                },
+                "region": {
+                  "startLine": 87,
+                  "startColumn": 5
+                }
+              }
+            }
+          ],
+          "properties": {
+            "verdict": "unverified",
+            "remediation": "LLM analysis skipped."
+          }
+        }
+      ]
+    }
+  ]
+}
