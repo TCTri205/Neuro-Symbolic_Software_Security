@@ -171,3 +171,20 @@ rules:
       include:
         - "setup.py"
         - "install.py"
+
+  - id: nsss.python.owasp.a03.ssti
+    languages: [python]
+    message: |
+      Potential Server-Side Template Injection (SSTI). 
+      Rendering templates from untrusted string input can allow arbitrary code execution.
+      Use static template files instead of string concatenation.
+    severity: ERROR
+    metadata:
+      owasp: "A03:2021 - Injection"
+      cwe: "CWE-1336"
+    patterns:
+      - pattern-either:
+          - pattern: jinja2.Template(...)
+          - pattern: django.template.Template(...)
+          - pattern: flask.render_template_string(...)
+          - pattern: mako.template.Template(...)
