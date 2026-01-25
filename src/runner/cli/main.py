@@ -27,7 +27,7 @@ def cli():
     "--report-type",
     "report_types",
     multiple=True,
-    type=click.Choice(["markdown", "sarif"], case_sensitive=False),
+    type=click.Choice(["markdown", "sarif", "ir"], case_sensitive=False),
     help="Report types to generate (repeatable).",
 )
 @click.option(

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from src.report.manager import ReportManager
 from src.report.markdown import MarkdownReporter
 from src.report.sarif import SarifReporter
+from src.report.ir import IRReporter
 
 
 @pytest.fixture
@@ -30,15 +31,17 @@ def test_generate_all_success(temp_report_dir, mock_results):
     # But we want to verify the manager logic
     with patch.object(MarkdownReporter, "generate") as mock_md, patch.object(
         SarifReporter, "generate"
-    ) as mock_sarif:
+    ) as mock_sarif, patch.object(IRReporter, "generate") as mock_ir:
         generated = manager.generate_all(mock_results)
 
-        assert len(generated) == 2
+        assert len(generated) == 3
         assert os.path.join(temp_report_dir, "nsss_report.md") in generated
         assert os.path.join(temp_report_dir, "nsss_report.sarif") in generated
+        assert os.path.join(temp_report_dir, "nsss_report.ir.json") in generated
 
         mock_md.assert_called_once()
         mock_sarif.assert_called_once()
+        mock_ir.assert_called_once()
 
         # Verify dir was created
         assert os.path.exists(temp_report_dir)
@@ -57,15 +60,19 @@ def test_reporter_failure_resilience(temp_report_dir, mock_results):
 
     with patch.object(
         MarkdownReporter, "generate", side_effect=Exception("MD Failed")
-    ) as mock_md, patch.object(SarifReporter, "generate") as mock_sarif:
+    ) as mock_md, patch.object(SarifReporter, "generate") as mock_sarif, patch.object(
+        IRReporter, "generate"
+    ) as mock_ir:
         generated = manager.generate_all(mock_results)
 
-        # Should still generate SARIF even if MD fails
-        assert len(generated) == 1
-        assert generated[0].endswith(".sarif")
+        # Should still generate SARIF + IR even if MD fails
+        assert len(generated) == 2
+        assert any(path.endswith(".sarif") for path in generated)
+        assert any(path.endswith(".ir.json") for path in generated)
 
         mock_md.assert_called_once()
         mock_sarif.assert_called_once()
+        mock_ir.assert_called_once()
 
 
 def test_report_type_filtering(temp_report_dir, mock_results):

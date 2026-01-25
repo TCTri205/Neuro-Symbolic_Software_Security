@@ -4,6 +4,7 @@ from typing import Dict, Any, List, Optional
 from .base import BaseReporter
 from .markdown import MarkdownReporter
 from .sarif import SarifReporter
+from .ir import IRReporter
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,7 @@ class ReportManager:
         self._reporter_registry = {
             "markdown": (MarkdownReporter, ".md"),
             "sarif": (SarifReporter, ".sarif"),
+            "ir": (IRReporter, ".ir.json"),
         }
         self.reporters: List[BaseReporter] = self._build_reporters(report_types)
 
