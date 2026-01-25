@@ -126,3 +126,48 @@ rules:
           - pattern: flask.send_from_directory(..., $PATH, ...)
       - pattern-not: open("...", ...)
       - pattern-not: flask.send_file("...", ...)
+
+  - id: nsss.python.owasp.a06.supply-chain-code-execution
+    languages: [python]
+    message: |
+      Potential malicious code execution detected in package configuration. 
+      Functions like os.system, subprocess.call, or eval should not be used 
+      in setup.py or similar installation scripts as they can be used 
+      for supply chain attacks.
+    severity: ERROR
+    metadata:
+      owasp: "A06:2021 - Vulnerable and Outdated Components"
+      cwe: "CWE-94"
+    patterns:
+      - pattern-either:
+          - pattern: os.system(...)
+          - pattern: os.popen(...)
+          - pattern: subprocess.call(...)
+          - pattern: subprocess.run(...)
+          - pattern: subprocess.Popen(...)
+          - pattern: eval(...)
+          - pattern: exec(...)
+    paths:
+      include:
+        - "setup.py"
+        - "install.py"
+
+  - id: nsss.python.owasp.a06.supply-chain-network-access
+    languages: [python]
+    message: |
+      Potential malicious network activity detected in package configuration.
+      Installation scripts should not perform network requests (urllib, requests, socket)
+      as these are often used to exfiltrate sensitive data during supply chain attacks.
+    severity: ERROR
+    metadata:
+      owasp: "A06:2021 - Vulnerable and Outdated Components"
+      cwe: "CWE-200"
+    patterns:
+      - pattern-either:
+          - pattern: requests.$METHOD(...)
+          - pattern: urllib.request.urlopen(...)
+          - pattern: socket.socket(...)
+    paths:
+      include:
+        - "setup.py"
+        - "install.py"
