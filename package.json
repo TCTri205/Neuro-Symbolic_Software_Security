@@ -1,0 +1,15 @@
+{
+  "name": "neuro-symbolic-software-security",
+  "version": "0.1.0",
+  "description": "Neuro-Symbolic Software Security - Defense-in-Depth Pipeline",
+  "scripts": {
+    "scan:fast": "python -m src.runner scan . --mode ci",
+    "scan:full": "python -m src.runner scan . --mode audit",
+    "test": "pytest",
+    "lint": "ruff check .",
+    "format": "ruff format ."
+  },
+  "author": "NSSS Team",
+  "license": "MIT",
+  "private": true
+}

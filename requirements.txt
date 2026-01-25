@@ -24,3 +24,6 @@ anthropic>=0.3.0
 pytest>=7.0.0
 pytest-cov>=4.1.0
 pytest-mock>=3.10.0
+
+# Development
+ruff>=0.6.0
