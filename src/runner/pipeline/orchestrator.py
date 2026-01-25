@@ -7,10 +7,12 @@ from src.core.cfg.ssa.transformer import SSATransformer
 from src.core.cfg.callgraph import CallGraph, CallGraphBuilder
 from src.runner.tools.semgrep import SemgrepRunner
 from src.runner.tools.llm import LLMClient
+from src.librarian import Librarian
 
 class Pipeline:
     def __init__(self):
         self.results = {}
+        self.librarian = Librarian()
 
     def scan_file(self, file_path: str):
         try:
@@ -115,6 +117,13 @@ class Pipeline:
 
             ssa_context = self._build_ssa_context(block, ssa)
             prompt = self._build_llm_prompt(block, snippet, file_path, ssa_context)
+            
+            # Check Librarian for cached decision
+            cached_insight = self.librarian.query(prompt)
+            if cached_insight:
+                block.llm_insights.append(cached_insight)
+                continue
+
             response = client.chat(prompt)
             insight = {
                 "provider": client.provider,
@@ -145,6 +154,15 @@ class Pipeline:
                 except Exception:
                     # Failed to parse, valid JSON might not be returned
                     pass
+
+            # Store in Librarian if successful
+            if not insight.get("error") and content:
+                self.librarian.store(
+                    prompt, 
+                    content, 
+                    insight.get("analysis", []), 
+                    client.model
+                )
 
             if "status" in response:
                 insight["status"] = response["status"]
