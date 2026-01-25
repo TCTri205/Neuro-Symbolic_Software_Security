@@ -108,3 +108,21 @@ rules:
       - pattern-either:
           - pattern: $APP.run(..., debug=True, ...)
           - pattern: $APP.run(..., debug=1, ...)
+
+  - id: nsss.python.owasp.a01.path-traversal
+    languages: [python]
+    message: |
+      Possible Path Traversal detected. File path constructed from untrusted input 
+      may allow access to unauthorized files. Validate input using os.path.basename 
+      or check against allowed paths.
+    severity: ERROR
+    metadata:
+      owasp: "A01:2021 - Broken Access Control"
+      cwe: "CWE-22"
+    patterns:
+      - pattern-either:
+          - pattern: open(..., $PATH, ...)
+          - pattern: flask.send_file(..., $PATH, ...)
+          - pattern: flask.send_from_directory(..., $PATH, ...)
+      - pattern-not: open("...", ...)
+      - pattern-not: flask.send_file("...", ...)

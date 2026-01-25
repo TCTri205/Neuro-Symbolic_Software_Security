@@ -123,11 +123,28 @@ class LibrarianDB:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
+        # Check if exists
         cursor.execute("""
-            INSERT INTO remediation_strategies 
-            (vulnerability_type_id, strategy_name, description, code_template)
-            VALUES (?, ?, ?, ?)
-        """, (vulnerability_type_id, strategy_name, description, code_template))
+            SELECT id FROM remediation_strategies 
+            WHERE vulnerability_type_id = ? AND strategy_name = ?
+        """, (vulnerability_type_id, strategy_name))
+        
+        existing = cursor.fetchone()
+        
+        if existing:
+            # Update
+            cursor.execute("""
+                UPDATE remediation_strategies
+                SET description = ?, code_template = ?
+                WHERE id = ?
+            """, (description, code_template, existing[0]))
+        else:
+            # Insert
+            cursor.execute("""
+                INSERT INTO remediation_strategies 
+                (vulnerability_type_id, strategy_name, description, code_template)
+                VALUES (?, ?, ?, ?)
+            """, (vulnerability_type_id, strategy_name, description, code_template))
         
         conn.commit()
         conn.close()

@@ -33,7 +33,14 @@ class Pipeline:
             # Build CFG for the whole module
             cfg = builder.build(os.path.basename(file_path), tree)
 
-            semgrep_runner = SemgrepRunner()
+            # Determine semgrep config
+            # Try to find the NSSS specific rules file
+            rules_path = os.path.join(os.getcwd(), "rules", "nsss-python-owasp.yml")
+            semgrep_config = "auto"
+            if os.path.exists(rules_path):
+                semgrep_config = rules_path
+            
+            semgrep_runner = SemgrepRunner(config=semgrep_config)
             semgrep_results = semgrep_runner.run(file_path)
             self._map_semgrep_findings(cfg, semgrep_results, file_path)
             
