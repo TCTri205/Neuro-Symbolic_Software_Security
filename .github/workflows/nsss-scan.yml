@@ -28,6 +28,12 @@ jobs:
         # Install semgrep explicitly if not covered or requires binary
         pip install semgrep
 
+    - name: Run Unit Tests
+      env:
+        PYTHONPATH: ${{ github.workspace }}
+      run: |
+        pytest tests/
+
     - name: Run NSSS Scan on Benchmark
       env:
         PYTHONPATH: ${{ github.workspace }}

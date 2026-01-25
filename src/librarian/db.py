@@ -106,6 +106,32 @@ class LibrarianDB:
         conn.commit()
         conn.close()
 
+    def add_vulnerability_type(self, id: str, name: str, description: str, owasp_category: str, cwe_id: str):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT OR REPLACE INTO vulnerability_types 
+            (id, name, description, owasp_category, cwe_id)
+            VALUES (?, ?, ?, ?, ?)
+        """, (id, name, description, owasp_category, cwe_id))
+        
+        conn.commit()
+        conn.close()
+
+    def add_remediation_strategy(self, vulnerability_type_id: str, strategy_name: str, description: str, code_template: str = ""):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            INSERT INTO remediation_strategies 
+            (vulnerability_type_id, strategy_name, description, code_template)
+            VALUES (?, ?, ?, ?)
+        """, (vulnerability_type_id, strategy_name, description, code_template))
+        
+        conn.commit()
+        conn.close()
+
     def get_decision(self, context_hash: str) -> Optional[Dict[str, Any]]:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
