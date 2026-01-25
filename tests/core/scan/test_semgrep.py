@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from src.core.pipeline.orchestrator import AnalysisOrchestrator
-from src.runner.tools.semgrep import SemgrepRunner
+from src.core.scan.semgrep import SemgrepRunner
 
 
 class TestSemgrepIntegration(unittest.TestCase):

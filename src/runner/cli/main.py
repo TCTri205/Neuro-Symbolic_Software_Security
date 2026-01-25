@@ -36,7 +36,7 @@ def scan(target_path, mode, output_format, report_dir):
 
     # Invoking Pipeline
     from src.core.pipeline.orchestrator import AnalysisOrchestrator
-    from src.report import MarkdownReporter, SarifReporter
+    from src.report import ReportManager
     import os
     import json
 
@@ -58,15 +58,11 @@ def scan(target_path, mode, output_format, report_dir):
     # Generate reports
     click.echo(f"Generating reports in {report_dir}...")
 
-    # Markdown
-    md_reporter = MarkdownReporter()
-    md_path = os.path.join(report_dir, "nsss_report.md")
-    md_reporter.generate(results, md_path)
+    report_manager = ReportManager(report_dir)
+    generated_reports = report_manager.generate_all(results)
 
-    # SARIF
-    sarif_reporter = SarifReporter()
-    sarif_path = os.path.join(report_dir, "nsss_report.sarif")
-    sarif_reporter.generate(results, sarif_path)
+    for report_path in generated_reports:
+        click.echo(f"  - {report_path}")
 
     click.echo(f"Reports generated.")
 

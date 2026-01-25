@@ -36,8 +36,13 @@ foo()
                 "src.core.pipeline.orchestrator.SemgrepRunner"
             ) as mock_runner, patch(
                 "src.core.pipeline.orchestrator.LLMClient"
-            ) as mock_llm:
+            ) as mock_llm, patch(
+                "src.core.pipeline.orchestrator.Librarian"
+            ) as mock_librarian:
                 mock_runner.return_value.run.return_value = mock_semgrep
+
+                # Ensure librarian returns None to force LLM call
+                mock_librarian.return_value.query.return_value = None
 
                 llm_instance = mock_llm.return_value
                 llm_instance.is_configured = True
@@ -60,7 +65,7 @@ foo()
             messages = args[0]
             self.assertTrue(
                 any(
-                    "SSA context" in message.get("content", "")
+                    "DATA FLOW (SSA)" in message.get("content", "")
                     for message in messages
                     if message.get("role") == "user"
                 )
@@ -106,8 +111,12 @@ def insecure():
                 "src.core.pipeline.orchestrator.SemgrepRunner"
             ) as mock_runner, patch(
                 "src.core.pipeline.orchestrator.LLMClient"
-            ) as mock_llm:
+            ) as mock_llm, patch(
+                "src.core.pipeline.orchestrator.Librarian"
+            ) as mock_librarian:
                 mock_runner.return_value.run.return_value = mock_semgrep
+
+                mock_librarian.return_value.query.return_value = None
 
                 llm_instance = mock_llm.return_value
                 llm_instance.is_configured = True
@@ -128,9 +137,9 @@ def insecure():
             messages = args[0]
             user_msg = next(m["content"] for m in messages if m["role"] == "user")
             self.assertIn(
-                "Provide a concise rationale and a specific code remediation", user_msg
+                "Provide a concrete code remediation for True Positives", user_msg
             )
-            self.assertIn("'remediation'", user_msg)
+            self.assertIn('"remediation"', user_msg)
 
             # Check result stored and parsed
             insight = blocks_with_findings[0]["llm_insights"][0]

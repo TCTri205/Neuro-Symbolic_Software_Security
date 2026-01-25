@@ -13,9 +13,9 @@ from src.core.privacy.masker import PrivacyMasker
 from src.core.analysis.sanitizers import SanitizerRegistry
 from src.core.telemetry import get_logger, MeasureLatency
 
-# Tools
-from src.runner.tools.semgrep import SemgrepRunner
-from src.runner.tools.llm import LLMClient
+from src.core.ai.prompts import SecurityPromptBuilder
+from src.core.scan.semgrep import SemgrepRunner
+from src.core.ai.llm_client import LLMClient
 from src.librarian import Librarian
 
 
@@ -98,6 +98,7 @@ class AnalysisOrchestrator:
         self.privacy_masker = PrivacyMasker()
         self.sanitizer_registry = SanitizerRegistry()
         self.librarian = Librarian()
+        self.prompt_builder = SecurityPromptBuilder()
         self.logger = get_logger(__name__)
 
         # Determine semgrep config
@@ -279,7 +280,9 @@ class AnalysisOrchestrator:
                 continue
 
             ssa_context = self._build_ssa_context(block, ssa)
-            prompt = self._build_llm_prompt(block, snippet, file_path, ssa_context)
+            prompt = self.prompt_builder.build_analysis_prompt(
+                block, snippet, file_path, ssa_context
+            )
 
             # Determine primary check_id for semantic lookup
             primary_check_id = ""
@@ -427,35 +430,3 @@ class AnalysisOrchestrator:
             ],
         }
         return context
-
-    def _build_llm_prompt(
-        self,
-        block,
-        snippet: str,
-        file_path: str,
-        ssa_context: Dict[str, Any],
-    ) -> List[Dict[str, str]]:
-        findings = json.dumps(block.security_findings, indent=2)
-        ssa_summary = json.dumps(ssa_context, indent=2)
-        message = (
-            "You are a security analyst. For each finding, determine whether it is a true positive, "
-            "false positive, or needs review. Provide a concise rationale and a specific code remediation.\n"
-            "Respond in JSON with an array under key 'analysis', each item containing:\n"
-            "- 'check_id': The exact rule ID from the findings.\n"
-            "- 'verdict': One of ['True Positive', 'False Positive', 'Needs Review'].\n"
-            "- 'rationale': A brief explanation of why this is a vulnerability or false alarm.\n"
-            "- 'remediation': A specific code snippet to fix the issue. Do NOT use markdown code blocks in this field.\n\n"
-            f"File: {file_path}\n"
-            f"Block scope: {block.scope}\n"
-            f"Block id: {block.id}\n\n"
-            "SSA context:\n"
-            f"{ssa_summary}\n\n"
-            "Findings:\n"
-            f"{findings}\n\n"
-            "Code snippet:\n"
-            f"{snippet}"
-        )
-        return [
-            {"role": "system", "content": "You analyze code security findings."},
-            {"role": "user", "content": message},
-        ]
