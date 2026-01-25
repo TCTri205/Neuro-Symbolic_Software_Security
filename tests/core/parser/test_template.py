@@ -12,10 +12,10 @@ def test_parse_variables():
     assert len(vars) == 2
     
     assert vars[0].expression == "user.name"
-    assert vars[0].is_safe == False
+    assert not vars[0].is_safe
     
     assert vars[1].expression == "content"
-    assert vars[1].is_safe == True
+    assert vars[1].is_safe
     assert "safe" in vars[1].filters
 
 def test_detect_ssti_patterns():

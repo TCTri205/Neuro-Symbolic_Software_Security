@@ -28,17 +28,30 @@ Dự án tuân thủ mô hình **Defense-in-Depth** với quy trình xử lý 4 
 ### Các bước cài đặt:
 1.  Clone repository.
 2.  Khởi tạo virtual environment: `python -m venv venv`.
-3.  Cài đặt dependencies: (Hiện tại dự án đang trong giai đoạn cấu trúc, vui lòng tham khảo `pyproject.toml` khi có).
-4.  Cấu hình biến môi trường: Sao chép `.env.example` thành `.env` và điền các API Key cần thiết.
+3.  Kích hoạt virtual environment:
+    - Windows (PowerShell): `venv\Scripts\activate`
+    - macOS/Linux: `source venv/bin/activate`
+4.  Cài đặt dependencies: `python -m pip install -r requirements.txt`.
+5.  Cấu hình biến môi trường: Sao chép `.env.example` thành `.env` và điền các API Key cần thiết.
 
 ## 3. Các Script Khả dụng (Available Scripts)
 
-*(Lưu ý: Các script sẽ được cập nhật chính thức trong `package.json` hoặc `makefile`)*
+*(Ưu tiên dùng `Makefile` cho build automation, và có thể dùng `npm` như lớp wrapper tương thích.)*
+
+### Makefile
+*   `make venv`: Tạo virtual environment.
+*   `make install`: Cài đặt dependencies từ `requirements.txt`.
+*   `make lint`: Chạy ruff check.
+*   `make format`: Format code bằng ruff.
+*   `make test`: Chạy pytest.
+*   `make scan-fast`: CI mode.
+*   `make scan-full`: Audit mode.
 
 *   `npm run scan:fast`: Chạy CI/CD Mode (Chỉ Stage 1 & 3).
 *   `npm run scan:full`: Chạy Audit Mode (Toàn bộ 4 Stage).
 *   `npm run test`: Chạy bộ test suite.
 *   `npm run lint`: Kiểm tra format và coding style.
+*   `npm run format`: Format code.
 
 ## 4. Quy trình Kiểm thử (Testing Procedures)
 

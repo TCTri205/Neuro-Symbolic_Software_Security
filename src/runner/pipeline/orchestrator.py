@@ -300,13 +300,15 @@ class Pipeline:
                 
                 if isinstance(node, ast.Name):
                     version = ssa.ssa_map.get(node)
-                    if not version: continue
+                    if not version:
+                        continue
                     entry = (node.id, version)
                     if isinstance(node.ctx, ast.Store):
                         is_def = True
                 elif isinstance(node, ast.arg):
                     version = ssa.ssa_map.get(node)
-                    if not version: continue
+                    if not version:
+                        continue
                     entry = (node.arg, version)
                     is_def = True # Args are defs
                 
