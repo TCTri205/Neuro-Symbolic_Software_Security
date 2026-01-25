@@ -30,8 +30,14 @@ def cli():
     type=click.Choice(["markdown", "sarif"], case_sensitive=False),
     help="Report types to generate (repeatable).",
 )
+@click.option(
+    "--emit-ir",
+    is_flag=True,
+    default=False,
+    help="Include parsed IR in output JSON.",
+)
 @click.option("--report-dir", default=".", help="Directory to save reports.")
-def scan(target_path, mode, output_format, report_types, report_dir):
+def scan(target_path, mode, output_format, report_types, emit_ir, report_dir):
     """
     Scan a target directory or file.
     """
@@ -48,7 +54,7 @@ def scan(target_path, mode, output_format, report_types, report_dir):
     import json
 
     click.echo("Running analysis pipeline...")
-    orchestrator = AnalysisOrchestrator()
+    orchestrator = AnalysisOrchestrator(enable_ir=emit_ir)
     results = {}
 
     if os.path.isfile(target_path):

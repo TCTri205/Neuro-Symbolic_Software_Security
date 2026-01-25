@@ -197,12 +197,25 @@ def decide(x, items):
 
 def test_match_binds_symbols():
     source = """
+class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
 def pick(v):
     match v:
         case {"k": x}:
             return x
         case [a, b]:
             return a
+        case {"k": x, **rest}:
+            return x
+        case [*tail]:
+            return tail
+        case Point(x=c, y=d):
+            return c
+        case [a, b] as seq:
+            return seq
 """
     parser = PythonAstParser(source, "example.py")
     graph = parser.parse()
@@ -213,11 +226,21 @@ def pick(v):
     assert "x" in binds
     assert "a" in binds
     assert "b" in binds
+    assert "rest" in binds
+    assert "tail" in binds
+    assert "c" in binds
+    assert "d" in binds
+    assert "seq" in binds
 
     bound_symbols = {s.name for s in graph.symbols}
     assert "x" in bound_symbols
     assert "a" in bound_symbols
     assert "b" in bound_symbols
+    assert "rest" in bound_symbols
+    assert "tail" in bound_symbols
+    assert "c" in bound_symbols
+    assert "d" in bound_symbols
+    assert "seq" in bound_symbols
 
 
 def test_symbol_defs_and_uses():

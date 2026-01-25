@@ -8,6 +8,7 @@ import json
 from src.core.cfg.builder import CFGBuilder
 from src.core.cfg.callgraph import CallGraph, CallGraphBuilder
 from src.core.cfg.ssa.transformer import SSATransformer
+from src.core.parser import PythonAstParser
 from src.core.scan.secrets import SecretScanner, SecretMatch
 from src.core.privacy.masker import PrivacyMasker
 from src.core.analysis.sanitizers import SanitizerRegistry
@@ -25,6 +26,7 @@ class AnalysisResult:
     cfg: Optional[Any] = None
     ssa: Optional[Any] = None
     call_graph: Optional[Any] = None
+    ir: Optional[Any] = None
     semgrep_results: Dict[str, Any] = field(default_factory=dict)
     secrets: List[SecretMatch] = field(default_factory=list)
     masked_code: Optional[str] = None
@@ -65,7 +67,7 @@ class AnalysisResult:
         # SSA stats
         var_count = len(self.ssa.vars) if self.ssa else 0
 
-        return {
+        payload = {
             "name": self.cfg.name,
             "stats": {
                 "block_count": len(self.cfg._blocks),
@@ -80,6 +82,9 @@ class AnalysisResult:
             "secrets": [s.__dict__ for s in self.secrets],
             "errors": self.errors,
         }
+        if self.ir:
+            payload["ir"] = self.ir
+        return payload
 
 
 class AnalysisOrchestrator:
@@ -93,13 +98,14 @@ class AnalysisOrchestrator:
     6. LLM Analysis (with Librarian caching)
     """
 
-    def __init__(self):
+    def __init__(self, enable_ir: bool = False):
         self.secret_scanner = SecretScanner()
         self.privacy_masker = PrivacyMasker()
         self.sanitizer_registry = SanitizerRegistry()
         self.librarian = Librarian()
         self.prompt_builder = SecurityPromptBuilder()
         self.logger = get_logger(__name__)
+        self.enable_ir = enable_ir
 
         # Determine semgrep config
         rules_path = os.path.join(os.getcwd(), "rules", "nsss-python-owasp.yml")
@@ -129,6 +135,17 @@ class AnalysisOrchestrator:
                     result.semgrep_results = self.semgrep_runner.run(file_path)
             except Exception as e:
                 msg = f"Semgrep scan failed: {e}"
+                self.logger.error(msg)
+                result.errors.append(msg)
+
+        # Step 2.5: IR (optional)
+        if self.enable_ir:
+            try:
+                with MeasureLatency("parse_ir"):
+                    parser = PythonAstParser(source_code, file_path)
+                    result.ir = parser.parse().model_dump(by_alias=True)
+            except Exception as e:
+                msg = f"IR parsing failed: {e}"
                 self.logger.error(msg)
                 result.errors.append(msg)
 
