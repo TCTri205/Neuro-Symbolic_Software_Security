@@ -1,0 +1,45 @@
+name: NSSS Security Scan
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: "3.10"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # Install semgrep explicitly if not covered or requires binary
+        pip install semgrep
+
+    - name: Run NSSS Scan on Benchmark
+      env:
+        PYTHONPATH: ${{ github.workspace }}
+        # Mock LLM API Key or use a dummy mode if supported
+        OPENAI_API_KEY: "dummy_key_for_ci" 
+        ANTHROPIC_API_KEY: "dummy_key_for_ci"
+      run: |
+        # Create a simple runner script inline or call module if it exists
+        python -c "from src.runner.pipeline.orchestrator import run_scan_pipeline, generate_reports; results = run_scan_pipeline('benchmarks/vulnerable_flask_app/app.py'); generate_reports(results, '.')"
+
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: nsss_report.sarif

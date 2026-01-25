@@ -21,7 +21,34 @@ class LibrarianDB:
                 remediation TEXT,
                 timestamp DATETIME,
                 model TEXT,
-                raw_response TEXT
+                raw_response TEXT,
+                snippet_hash TEXT  -- New: Allow lookup by code content independent of prompt
+            )
+        """)
+        
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_decisions_check_id ON decisions(check_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_decisions_snippet_hash ON decisions(snippet_hash)")
+
+        # Table for Vulnerability Definitions (Knowledge Graph Node)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS vulnerability_types (
+                id TEXT PRIMARY KEY,  -- e.g., 'python.lang.security.audit.formatted-string'
+                name TEXT,
+                description TEXT,
+                owasp_category TEXT,  -- e.g., 'A03:2021-Injection'
+                cwe_id TEXT
+            )
+        """)
+
+        # Table for Remediation Strategies (Knowledge Graph Node)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS remediation_strategies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                vulnerability_type_id TEXT,
+                strategy_name TEXT,
+                description TEXT,
+                code_template TEXT,
+                FOREIGN KEY(vulnerability_type_id) REFERENCES vulnerability_types(id)
             )
         """)
         
@@ -93,27 +120,35 @@ class LibrarianDB:
             return dict(row)
         return None
 
-    def store_decision(self, context_hash: str, analysis: Dict[str, Any], raw_response: str, model: str):
+    def find_decision(self, check_id: str, snippet_hash: str) -> Optional[Dict[str, Any]]:
+        """
+        Finds a decision based on check_id and snippet hash, ignoring the full prompt context.
+        This allows for fuzzy matching or re-use of insights even if prompt wording changes slightly.
+        """
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # Prioritize Verified True Positives? Or just any match?
+        # For now, just find exact match on code+check
+        cursor.execute("""
+            SELECT * FROM decisions 
+            WHERE check_id = ? AND snippet_hash = ?
+            ORDER BY timestamp DESC LIMIT 1
+        """, (check_id, snippet_hash))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return dict(row)
+        return None
+
+    def store_decision(self, context_hash: str, analysis: Dict[str, Any], raw_response: str, model: str, snippet_hash: str = ""):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
-        # Extract fields from the first analysis item if available (assuming one main finding per prompt for now, 
-        # or we might need to adjust if we query multiple findings at once. 
-        # The prompt in orchestrator sends multiple findings. 
-        # But usually we cache the whole prompt/response interaction.)
-        
-        # Actually, looking at the orchestrator, we send a prompt with potentially multiple findings.
-        # The LLM returns an array of analysis items.
-        # Ideally, we should cache the request -> response mapping. 
-        # But the requirements say "Known False Positives... Verified True Positives".
-        # If we cache the whole response based on the input hash, that covers it.
-        # However, to be searchable by check_id, we might want to store individual items?
-        # For simple caching to avoid re-asking: Hash(Prompt) -> Response is sufficient.
-        # But to be a "Knowledge Base", we might want more granularity.
-        
-        # For this iteration, let's store the raw response mapped to the input hash,
-        # AND extract the first finding's details for metadata if possible.
-        
+        # Extract fields from the first analysis item if available
         check_id = ""
         verdict = ""
         rationale = ""
@@ -130,9 +165,9 @@ class LibrarianDB:
         timestamp = datetime.datetime.now().isoformat()
         
         cursor.execute("""
-            INSERT OR REPLACE INTO decisions (hash, check_id, verdict, rationale, remediation, timestamp, model, raw_response)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (context_hash, check_id, verdict, rationale, remediation, timestamp, model, raw_response))
+            INSERT OR REPLACE INTO decisions (hash, check_id, verdict, rationale, remediation, timestamp, model, raw_response, snippet_hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (context_hash, check_id, verdict, rationale, remediation, timestamp, model, raw_response, snippet_hash))
         
         conn.commit()
         conn.close()

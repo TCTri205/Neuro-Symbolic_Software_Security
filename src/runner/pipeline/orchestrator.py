@@ -119,8 +119,13 @@ class Pipeline:
             ssa_context = self._build_ssa_context(block, ssa)
             prompt = self._build_llm_prompt(block, snippet, file_path, ssa_context)
             
+            # Determine primary check_id for semantic lookup
+            primary_check_id = ""
+            if block.security_findings:
+                primary_check_id = block.security_findings[0].get("check_id", "")
+
             # Check Librarian for cached decision
-            cached_insight = self.librarian.query(prompt)
+            cached_insight = self.librarian.query(prompt, check_id=primary_check_id, snippet=snippet)
             if cached_insight:
                 cached_insight["snippet"] = snippet
                 block.llm_insights.append(cached_insight)
@@ -164,7 +169,8 @@ class Pipeline:
                     prompt, 
                     content, 
                     insight.get("analysis", []), 
-                    client.model
+                    client.model,
+                    snippet=snippet
                 )
 
             if "status" in response:
@@ -269,50 +275,47 @@ class Pipeline:
         # Filter for variables involved in the findings
         relevant_lines = {f.get("line") for f in block.security_findings if f.get("line")}
         relevant_vars = set()
-
-        if relevant_lines:
-            for stmt in block.statements:
-                start = getattr(stmt, "lineno", None)
-                if start is None:
-                    continue
-                end = getattr(stmt, "end_lineno", start)
-                
-                # Check if statement overlaps with any finding line
-                if any(start <= line <= end for line in relevant_lines):
-                    for node in ast.walk(stmt):
-                        if isinstance(node, ast.Name):
-                            version = ssa.ssa_map.get(node)
-                            if version:
-                                relevant_vars.add((node.id, version))
-                        elif isinstance(node, ast.arg):
-                            version = ssa.ssa_map.get(node)
-                            if version:
-                                relevant_vars.add((node.arg, version))
-
+        
+        candidates = []
+        
         for stmt in block.statements:
+            start = getattr(stmt, "lineno", None)
+            end = getattr(stmt, "end_lineno", start)
+            
+            is_relevant_stmt = False
+            if start is not None and relevant_lines:
+                 if any(start <= line <= end for line in relevant_lines):
+                     is_relevant_stmt = True
+            
             for node in ast.walk(stmt):
+                entry = None
+                is_def = False
+                
                 if isinstance(node, ast.Name):
                     version = ssa.ssa_map.get(node)
-                    if not version:
-                        continue
-                    
+                    if not version: continue
                     entry = (node.id, version)
-                    # Filter: Only include if relevant (or if no relevant vars found, fallback to all?)
-                    # Let's strict filter if relevant_vars is populated.
-                    if relevant_vars and entry not in relevant_vars:
-                        continue
-                        
                     if isinstance(node.ctx, ast.Store):
-                        defs.add(entry)
-                    else:
-                        uses.add(entry)
+                        is_def = True
                 elif isinstance(node, ast.arg):
                     version = ssa.ssa_map.get(node)
-                    if version:
-                        entry = (node.arg, version)
-                        if relevant_vars and entry not in relevant_vars:
-                            continue
-                        defs.add(entry)
+                    if not version: continue
+                    entry = (node.arg, version)
+                    is_def = True # Args are defs
+                
+                if entry:
+                    if is_relevant_stmt:
+                        relevant_vars.add(entry)
+                    candidates.append((entry, is_def))
+
+        for entry, is_def in candidates:
+            if relevant_vars and entry not in relevant_vars:
+                continue
+            
+            if is_def:
+                defs.add(entry)
+            else:
+                uses.add(entry)
 
         phi_nodes = [str(p) for p in block.phi_nodes]
         context = {

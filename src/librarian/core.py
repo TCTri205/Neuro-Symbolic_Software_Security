@@ -49,12 +49,25 @@ class Librarian:
         
         return hashlib.sha256(content_str.encode("utf-8")).hexdigest()
 
-    def query(self, prompt_messages: List[Dict[str, str]]) -> Optional[Dict[str, Any]]:
+    def compute_snippet_hash(self, snippet: str) -> str:
+        """Computes hash of the code snippet (ignoring whitespace might be better, but strict for now)"""
+        if not snippet:
+            return ""
+        return hashlib.sha256(snippet.strip().encode("utf-8")).hexdigest()
+
+    def query(self, prompt_messages: List[Dict[str, str]], check_id: str = None, snippet: str = None) -> Optional[Dict[str, Any]]:
         """
         Checks if a decision for the given prompt already exists.
+        If check_id and snippet are provided, it attempts a semantic lookup first.
         """
+        # 1. Try exact prompt match (existing behavior)
         context_hash = self.compute_hash(prompt_messages)
         record = self.db.get_decision(context_hash)
+        
+        # 2. If no exact match, try semantic match (Knowledge Graph lookup)
+        if not record and check_id and snippet:
+            snippet_hash = self.compute_snippet_hash(snippet)
+            record = self.db.find_decision(check_id, snippet_hash)
         
         if record:
             # Reconstruct the insight object structure
@@ -89,7 +102,8 @@ class Librarian:
                 "model": record["model"],
                 "response": response_content,
                 "analysis": analysis_data,
-                "cached": True
+                "cached": True,
+                "verdict": record.get("verdict") # Useful for debug
             }
         
         return None
@@ -97,9 +111,12 @@ class Librarian:
     def store(self, prompt_messages: List[Dict[str, str]], 
               response_content: str, 
               analysis_data: List[Dict[str, Any]], 
-              model: str):
+              model: str,
+              snippet: str = None):
         """
         Stores the decision in the library.
         """
         context_hash = self.compute_hash(prompt_messages)
-        self.db.store_decision(context_hash, analysis_data, response_content, model)
+        snippet_hash = self.compute_snippet_hash(snippet) if snippet else ""
+        
+        self.db.store_decision(context_hash, analysis_data, response_content, model, snippet_hash)

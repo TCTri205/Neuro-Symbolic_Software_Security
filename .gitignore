@@ -147,3 +147,5 @@ cython_debug/
 # NSSS
 nsss_librarian.db
 *.db
+nsss_report.md
+nsss_report.sarif
