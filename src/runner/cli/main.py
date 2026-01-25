@@ -23,8 +23,15 @@ def cli():
     default="text",
     help="Output format.",
 )
+@click.option(
+    "--report-type",
+    "report_types",
+    multiple=True,
+    type=click.Choice(["markdown", "sarif"], case_sensitive=False),
+    help="Report types to generate (repeatable).",
+)
 @click.option("--report-dir", default=".", help="Directory to save reports.")
-def scan(target_path, mode, output_format, report_dir):
+def scan(target_path, mode, output_format, report_types, report_dir):
     """
     Scan a target directory or file.
     """
@@ -58,7 +65,8 @@ def scan(target_path, mode, output_format, report_dir):
     # Generate reports
     click.echo(f"Generating reports in {report_dir}...")
 
-    report_manager = ReportManager(report_dir)
+    report_types_list = [report_type.lower() for report_type in report_types]
+    report_manager = ReportManager(report_dir, report_types=report_types_list or None)
     generated_reports = report_manager.generate_all(results)
 
     for report_path in generated_reports:

@@ -1,4 +1,5 @@
 import os
+import os
 import shutil
 import pytest
 from unittest.mock import MagicMock, patch
@@ -65,3 +66,18 @@ def test_reporter_failure_resilience(temp_report_dir, mock_results):
 
         mock_md.assert_called_once()
         mock_sarif.assert_called_once()
+
+
+def test_report_type_filtering(temp_report_dir, mock_results):
+    manager = ReportManager(temp_report_dir, report_types=["markdown"])
+
+    with patch.object(MarkdownReporter, "generate") as mock_md, patch.object(
+        SarifReporter, "generate"
+    ) as mock_sarif:
+        generated = manager.generate_all(mock_results)
+
+        assert len(generated) == 1
+        assert generated[0].endswith(".md")
+
+        mock_md.assert_called_once()
+        mock_sarif.assert_not_called()

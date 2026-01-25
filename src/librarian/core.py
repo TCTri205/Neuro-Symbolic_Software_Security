@@ -4,11 +4,14 @@ from typing import Dict, Any, Optional, List
 from .db import LibrarianDB
 from .version import VersionMatcher
 
+
 class Librarian:
     def __init__(self, db_path: str = "nsss_librarian.db"):
         self.db = LibrarianDB(db_path)
 
-    def get_profiles(self, library_name: str, current_version: str) -> List[Dict[str, Any]]:
+    def get_profiles(
+        self, library_name: str, current_version: str
+    ) -> List[Dict[str, Any]]:
         """
         Retrieves profiles for a library matching the current version.
         """
@@ -17,26 +20,34 @@ class Librarian:
 
         all_profiles = self.db.get_library_profiles(library_name)
         matched = []
-        
+
         for p in all_profiles:
             spec = p["version_spec"]
             # Treat empty spec as match all ("*")
             if not spec or spec == "*":
                 matched.append(p)
                 continue
-            
+
             if VersionMatcher.match(current_version, spec):
                 matched.append(p)
-                
+
         return matched
 
-    def add_profile(self, library_name: str, version_spec: str, 
-                    profile_type: str, identifier: str, metadata: Dict[str, Any] = None):
+    def add_profile(
+        self,
+        library_name: str,
+        version_spec: str,
+        profile_type: str,
+        identifier: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ):
         """
         Adds a profile entry.
         """
         meta_str = json.dumps(metadata or {})
-        self.db.add_library_profile(library_name, version_spec, profile_type, identifier, meta_str)
+        self.db.add_library_profile(
+            library_name, version_spec, profile_type, identifier, meta_str
+        )
 
     def compute_hash(self, prompt_messages: List[Dict[str, str]]) -> str:
         """
@@ -46,16 +57,21 @@ class Librarian:
         content_str = ""
         for msg in prompt_messages:
             content_str += f"{msg.get('role')}:{msg.get('content')}\n"
-        
+
         return hashlib.sha256(content_str.encode("utf-8")).hexdigest()
 
-    def compute_snippet_hash(self, snippet: str) -> str:
+    def compute_snippet_hash(self, snippet: Optional[str]) -> str:
         """Computes hash of the code snippet (ignoring whitespace might be better, but strict for now)"""
         if not snippet:
             return ""
         return hashlib.sha256(snippet.strip().encode("utf-8")).hexdigest()
 
-    def query(self, prompt_messages: List[Dict[str, str]], check_id: str = None, snippet: str = None) -> Optional[Dict[str, Any]]:
+    def query(
+        self,
+        prompt_messages: List[Dict[str, str]],
+        check_id: Optional[str] = None,
+        snippet: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """
         Checks if a decision for the given prompt already exists.
         If check_id and snippet are provided, it attempts a semantic lookup first.
@@ -63,20 +79,20 @@ class Librarian:
         # 1. Try exact prompt match (existing behavior)
         context_hash = self.compute_hash(prompt_messages)
         record = self.db.get_decision(context_hash)
-        
+
         # 2. If no exact match, try semantic match (Knowledge Graph lookup)
         if not record and check_id and snippet:
             snippet_hash = self.compute_snippet_hash(snippet)
             record = self.db.find_decision(check_id, snippet_hash)
-        
+
         if record:
             # Reconstruct the insight object structure
             # We stored 'raw_response' which is the content string
             # We try to parse it again or return it as is?
             # The orchestrator expects an 'insight' dict.
-            
+
             response_content = record["raw_response"]
-            
+
             # We try to parse the analysis again to return a structured object
             # similar to what orchestrator does.
             analysis_data = []
@@ -90,7 +106,7 @@ class Librarian:
                 if clean_content.endswith("```"):
                     clean_content = clean_content[:-3]
                 clean_content = clean_content.strip()
-                
+
                 parsed = json.loads(clean_content)
                 if isinstance(parsed, dict) and "analysis" in parsed:
                     analysis_data = parsed["analysis"]
@@ -103,20 +119,31 @@ class Librarian:
                 "response": response_content,
                 "analysis": analysis_data,
                 "cached": True,
-                "verdict": record.get("verdict") # Useful for debug
+                "verdict": record.get("verdict"),  # Useful for debug
             }
-        
+
         return None
 
-    def store(self, prompt_messages: List[Dict[str, str]], 
-              response_content: str, 
-              analysis_data: List[Dict[str, Any]], 
-              model: str,
-              snippet: str = None):
+    def store(
+        self,
+        prompt_messages: List[Dict[str, str]],
+        response_content: str,
+        analysis_data: List[Dict[str, Any]],
+        model: str,
+        snippet: Optional[str] = None,
+        check_id: Optional[str] = None,
+    ):
         """
         Stores the decision in the library.
         """
         context_hash = self.compute_hash(prompt_messages)
         snippet_hash = self.compute_snippet_hash(snippet) if snippet else ""
-        
-        self.db.store_decision(context_hash, analysis_data, response_content, model, snippet_hash)
+
+        self.db.store_decision(
+            context_hash,
+            analysis_data,
+            response_content,
+            model,
+            snippet_hash,
+            check_id=check_id,
+        )

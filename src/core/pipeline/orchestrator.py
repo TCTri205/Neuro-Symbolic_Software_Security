@@ -15,7 +15,7 @@ from src.core.telemetry import get_logger, MeasureLatency
 
 from src.core.ai.prompts import SecurityPromptBuilder
 from src.core.scan.semgrep import SemgrepRunner
-from src.core.ai.llm_client import LLMClient
+from src.core.ai.client import LLMClient
 from src.librarian import Librarian
 
 
@@ -338,6 +338,7 @@ class AnalysisOrchestrator:
                     insight.get("analysis", []),
                     client.model,
                     snippet=snippet,
+                    check_id=primary_check_id,
                 )
 
             if "status" in response:

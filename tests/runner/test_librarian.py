@@ -1,4 +1,5 @@
 import os
+import os
 import unittest
 import tempfile
 import json
@@ -32,6 +33,7 @@ class TestLibrarianCore(unittest.TestCase):
         # Query
         result = self.librarian.query(prompt)
         self.assertIsNotNone(result)
+        assert result is not None
         self.assertTrue(result["cached"])
         self.assertEqual(result["model"], model)
         self.assertEqual(result["response"], response_content)
