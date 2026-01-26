@@ -45,20 +45,6 @@ class DocstringStripper(ast.NodeTransformer):
         self.generic_visit(node)
         return node
 
-    def visit_AsyncFunctionDef(
-        self, node: ast.AsyncFunctionDef
-    ) -> ast.AsyncFunctionDef:
-        self._strip_docstring_from_body(node)
-        return self.generic_visit(node)
-
-    def visit_ClassDef(self, node: ast.ClassDef) -> ast.ClassDef:
-        self._strip_docstring_from_body(node)
-        return self.generic_visit(node)
-
-    def visit_Module(self, node: ast.Module) -> ast.Module:
-        self._strip_docstring_from_body(node)
-        return self.generic_visit(node)
-
 
 def strip_docstrings(tree: ast.AST) -> ast.AST:
     """

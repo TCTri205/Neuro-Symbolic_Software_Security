@@ -4,7 +4,7 @@ import ast
 import hashlib
 from typing import Any, Dict, List, Optional
 
-from .ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol
+from .ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol, extract_source_code
 from .preprocessing import strip_docstrings
 
 
@@ -29,6 +29,15 @@ class PythonAstParser:
         self._loop_stack: List[Dict[str, Optional[str]]] = []
         self.max_literal_len = max_literal_len
         self.enable_docstring_stripping = enable_docstring_stripping
+
+    def get_source_segment(self, node_id: str) -> str:
+        """
+        Get the original source code segment for a specific node in the IR.
+        """
+        node = self._node_by_id.get(node_id)
+        if not node:
+            return ""
+        return extract_source_code(self.source, node.span)
 
     def _finalize_symbols(self) -> None:
         self.graph.symbols = [IRSymbol(**symbol) for symbol in self._symbols.values()]
@@ -667,7 +676,7 @@ class PythonAstParser:
         if isinstance(node, ast.Constant):
             value = node.value
             value_type = type(value).__name__
-            attrs = {"value_type": value_type}
+            attrs: Dict[str, Any] = {"value_type": value_type}
 
             # Normalize long string literals
             if isinstance(value, str) and len(value) > self.max_literal_len:
