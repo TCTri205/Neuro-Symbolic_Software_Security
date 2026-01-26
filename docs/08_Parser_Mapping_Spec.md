@@ -42,7 +42,10 @@ Tham chiếu bảng mapping ở `docs/07_IR_Schema.md`.
 ## 6) Normalization & literals
 
 - Strip docstring/comment trước khi tạo nodes.
-- String literal: lưu `value` ngắn (cap), phần còn lại lưu `hash` trong attrs.
+- **String literal normalization**: 
+  - Cấu hình: `max_literal_len=200` (mặc định)
+  - String dài hơn `max_literal_len`: lưu 200 ký tự đầu vào `attrs.value`, tạo SHA256 hash lưu vào `attrs.value_hash`, đánh dấu `attrs.value_truncated=true`
+  - String ngắn: lưu toàn bộ vào `attrs.value`
 - Numeric/Bool/None giữ nguyên trong `value`.
 
 ## 7) Symbol table

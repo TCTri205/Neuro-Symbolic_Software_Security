@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 from typing import Any, Dict, List, Optional
 
 from .ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol
 
 
 class PythonAstParser:
-    def __init__(self, source: str, file_path: str) -> None:
+    def __init__(self, source: str, file_path: str, max_literal_len: int = 200) -> None:
         self.source = source
         self.file_path = file_path
         self.graph = IRGraph()
@@ -19,6 +20,7 @@ class PythonAstParser:
         self._node_by_id: Dict[str, IRNode] = {}
         self._symbols: Dict[tuple[str, str], Dict[str, Any]] = {}
         self._loop_stack: List[Dict[str, Optional[str]]] = []
+        self.max_literal_len = max_literal_len
 
     def _finalize_symbols(self) -> None:
         self.graph.symbols = [IRSymbol(**symbol) for symbol in self._symbols.values()]
@@ -653,13 +655,24 @@ class PythonAstParser:
                 self._add_symbol_use(node.id, "var", self._current_scope(), node_id)
             return node_id
         if isinstance(node, ast.Constant):
-            value_type = type(node.value).__name__
+            value = node.value
+            value_type = type(value).__name__
+            attrs = {"value_type": value_type}
+
+            # Normalize long string literals
+            if isinstance(value, str) and len(value) > self.max_literal_len:
+                attrs["value"] = value[: self.max_literal_len]
+                attrs["value_hash"] = hashlib.sha256(value.encode()).hexdigest()
+                attrs["value_truncated"] = True
+            else:
+                attrs["value"] = value
+
             return self._add_node(
                 "Literal",
                 node,
                 parent_id=parent_id,
                 scope_id=self._current_scope(),
-                attrs={"value": node.value, "value_type": value_type},
+                attrs=attrs,
             )
         if isinstance(node, ast.Lambda):
             params = [arg.arg for arg in node.args.args]
@@ -898,7 +911,19 @@ class PythonAstParser:
                 scope_id=self._current_scope(),
                 attrs={"value_id": value_id, "is_from": True},
             )
-        return None
+
+        # Fallback for unsupported expression nodes
+        return self._add_node(
+            "Literal",
+            node,
+            parent_id=parent_id,
+            scope_id=self._current_scope(),
+            attrs={
+                "value_type": "Unknown",
+                "ast_type": type(node).__name__,
+                "unsupported": True,
+            },
+        )
 
     def _extract_target_name(self, target: ast.expr) -> str:
         if isinstance(target, ast.Name):
