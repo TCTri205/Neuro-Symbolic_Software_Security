@@ -191,7 +191,7 @@ class CFGBuilder(ast.NodeVisitor):
         self.current_block = exit_block
 
     def visit_AsyncFor(self, node: ast.AsyncFor):
-        # Same structure as For
+        # Same structure as For but with Async labels
         header_block = self._new_block()
         self.cfg.add_edge(self.current_block.id, header_block.id)
 
@@ -201,8 +201,8 @@ class CFGBuilder(ast.NodeVisitor):
         body_block = self._new_block()
         exit_block = self._new_block()
 
-        self.cfg.add_edge(header_block.id, body_block.id, label="Next")
-        self.cfg.add_edge(header_block.id, exit_block.id, label="Stop")
+        self.cfg.add_edge(header_block.id, body_block.id, label="AsyncNext")
+        self.cfg.add_edge(header_block.id, exit_block.id, label="AsyncStop")
 
         self.current_block = body_block
         for stmt in node.body:
@@ -230,14 +230,49 @@ class CFGBuilder(ast.NodeVisitor):
             if item.optional_vars:
                 self.current_block.add_statement(item.optional_vars)
 
+        # Split for AsyncEnter
+        enter_block = self.current_block
+        body_start = self._new_block()
+        self.cfg.add_edge(enter_block.id, body_start.id, label="AsyncEnter")
+        self.current_block = body_start
+
         for stmt in node.body:
             self.visit(stmt)
+
+        # Split for AsyncExit (implicit await on __aexit__)
+        body_end = self.current_block
+        after_with = self._new_block()
+        self.cfg.add_edge(body_end.id, after_with.id, label="AsyncExit")
+        self.current_block = after_with
+
+    def _contains_await(self, node: ast.AST) -> bool:
+        """Check if the node contains an await expression."""
+        for child in ast.walk(node):
+            if isinstance(child, ast.Await):
+                return True
+        return False
 
     # Default visitor for flat statements
     def generic_visit(self, node):
         if isinstance(
             node, (ast.Assign, ast.Expr, ast.Return, ast.AugAssign, ast.AnnAssign)
         ):
+            has_await = self._contains_await(node)
+
+            # If current block has statements and we found an await, start a new block
+            # to isolate the await statement.
+            if has_await and self.current_block.statements:
+                new_block = self._new_block()
+                self.cfg.add_edge(self.current_block.id, new_block.id)
+                self.current_block = new_block
+
             self.current_block.add_statement(node)
+
+            # If we found an await, we must end this block to represent the suspension point.
+            # The edge to the next block represents the resumption.
+            if has_await:
+                next_block = self._new_block()
+                self.cfg.add_edge(self.current_block.id, next_block.id, label="Resume")
+                self.current_block = next_block
         else:
             super().generic_visit(node)
