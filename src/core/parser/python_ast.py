@@ -5,6 +5,7 @@ import hashlib
 from typing import Any, Dict, List, Optional
 
 from .decorator_unroll import extract_all_decorators
+from .dynamic_tagging import tag_dynamic_areas
 from .embedded_lang_detector import detect_embedded_language
 from .ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol, extract_source_code
 from .preprocessing import strip_docstrings
@@ -17,6 +18,7 @@ class PythonAstParser:
         file_path: str,
         max_literal_len: int = 200,
         enable_docstring_stripping: bool = False,
+        enable_dynamic_tagging: bool = True,
     ) -> None:
         self.source = source
         self.file_path = file_path
@@ -31,6 +33,7 @@ class PythonAstParser:
         self._loop_stack: List[Dict[str, Optional[str]]] = []
         self.max_literal_len = max_literal_len
         self.enable_docstring_stripping = enable_docstring_stripping
+        self.enable_dynamic_tagging = enable_dynamic_tagging
 
     def get_source_segment(self, node_id: str) -> str:
         """
@@ -50,6 +53,8 @@ class PythonAstParser:
             strip_docstrings(module)
         self._visit_module(module)
         self._finalize_symbols()
+        if self.enable_dynamic_tagging:
+            tag_dynamic_areas(self.graph)
         return self.graph
 
     def _new_id(self, kind: str, node: ast.AST) -> str:
