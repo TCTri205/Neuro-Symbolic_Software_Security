@@ -4,6 +4,7 @@ import ast
 import hashlib
 from typing import Any, Dict, List, Optional
 
+from .decorator_unroll import extract_all_decorators
 from .embedded_lang_detector import detect_embedded_language
 from .ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol, extract_source_code
 from .preprocessing import strip_docstrings
@@ -137,6 +138,12 @@ class PythonAstParser:
         self, node: ast.FunctionDef | ast.AsyncFunctionDef, parent_id: str
     ) -> str:
         scope_id = f"scope:{node.name}"
+
+        # Extract decorator metadata for unrolling
+        decorator_metadata = (
+            extract_all_decorators(node.decorator_list) if node.decorator_list else []
+        )
+
         func_id = self._add_node(
             "Function",
             node,
@@ -147,6 +154,7 @@ class PythonAstParser:
                 "params": [arg.arg for arg in node.args.args],
                 "returns": ast.unparse(node.returns) if node.returns else None,
                 "decorators": [ast.unparse(d) for d in node.decorator_list],
+                "decorator_metadata": decorator_metadata,
                 "is_async": isinstance(node, ast.AsyncFunctionDef),
             },
         )
@@ -211,6 +219,14 @@ class PythonAstParser:
             return self._visit_function(node, parent_id)
         if isinstance(node, ast.ClassDef):
             scope_id = f"scope:{node.name}"
+
+            # Extract decorator metadata for unrolling
+            decorator_metadata = (
+                extract_all_decorators(node.decorator_list)
+                if node.decorator_list
+                else []
+            )
+
             class_id = self._add_node(
                 "Class",
                 node,
@@ -221,6 +237,7 @@ class PythonAstParser:
                     "bases": [ast.unparse(b) for b in node.bases],
                     "keywords": [ast.unparse(k) for k in node.keywords],
                     "decorators": [ast.unparse(d) for d in node.decorator_list],
+                    "decorator_metadata": decorator_metadata,
                 },
             )
             self._add_symbol_def(node.name, "class", self._current_scope(), class_id)
