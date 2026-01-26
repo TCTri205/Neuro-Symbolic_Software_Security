@@ -153,3 +153,7 @@ nsss_report.sarif
 # CodeGraph
 .codegraph_index.json
 .codegraph_cache/
+
+# Opencode
+.opencode/
+.opencode_logs/

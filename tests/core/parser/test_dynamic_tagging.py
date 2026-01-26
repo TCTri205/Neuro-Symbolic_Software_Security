@@ -20,9 +20,10 @@ def handler(user_input):
         node
         for node in graph.nodes
         if node.kind == "Call"
-        and nodes.get(node.attrs.get("callee_id"), None)
-        and nodes[node.attrs["callee_id"]].kind == "Name"
-        and nodes[node.attrs["callee_id"]].attrs.get("name") == "eval"
+        and (callee_id := node.attrs.get("callee_id")) is not None
+        and callee_id in nodes
+        and nodes[callee_id].kind == "Name"
+        and nodes[callee_id].attrs.get("name") == "eval"
     ]
     assert eval_calls
     assert "dynamic" in eval_calls[0].attrs.get("tags", [])
@@ -42,8 +43,9 @@ def run(obj, method):
         node
         for node in graph.nodes
         if node.kind == "Call"
-        and nodes.get(node.attrs.get("callee_id"), None)
-        and nodes[node.attrs["callee_id"]].kind == "Call"
+        and (callee_id := node.attrs.get("callee_id")) is not None
+        and callee_id in nodes
+        and nodes[callee_id].kind == "Call"
     ]
     assert dynamic_calls
     assert "dynamic" in dynamic_calls[0].attrs.get("tags", [])
