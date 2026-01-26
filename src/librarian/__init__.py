@@ -6,6 +6,7 @@ from .models import (
     SecurityLabel,
     ParameterSpec,
 )
+from .registry import ProfileRegistry
 
 __all__ = [
     "Librarian",
@@ -14,4 +15,5 @@ __all__ = [
     "FunctionSpec",
     "SecurityLabel",
     "ParameterSpec",
+    "ProfileRegistry",
 ]
