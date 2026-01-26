@@ -9,6 +9,7 @@ from src.core.cfg.builder import CFGBuilder
 from src.core.cfg.callgraph import CallGraph, CallGraphBuilder
 from src.core.cfg.ssa.transformer import SSATransformer
 from src.core.parser import PythonAstParser
+from src.core.parser.obfuscation import detect_obfuscation, is_binary_extension
 from src.core.scan.secrets import SecretScanner, SecretMatch
 from src.core.privacy.masker import PrivacyMasker
 from src.core.analysis.sanitizers import SanitizerRegistry
@@ -131,6 +132,17 @@ class AnalysisOrchestrator:
             self.logger.error(msg)
             result.errors.append(msg)
 
+        is_obfuscated, reasons = detect_obfuscation(source_code)
+        if is_obfuscated:
+            reason_text = ", ".join(reasons) if reasons else "heuristics"
+            msg = (
+                f"Obfuscated code detected ({reason_text}). "
+                "Skipping structural analysis."
+            )
+            self.logger.warning(msg)
+            result.errors.append(msg)
+            return result
+
         # Step 2: Semgrep (requires file path usually)
         if file_path and file_path != "<unknown>":
             try:
@@ -231,6 +243,10 @@ class AnalysisOrchestrator:
         return result
 
     def analyze_file(self, file_path: str) -> AnalysisResult:
+        if is_binary_extension(file_path):
+            msg = f"Skipping binary file: {file_path}"
+            self.logger.warning(msg)
+            return AnalysisResult(file_path=file_path, errors=[msg])
         try:
             with open(file_path, "r", encoding="utf-8") as f:
                 source_code = f.read()
