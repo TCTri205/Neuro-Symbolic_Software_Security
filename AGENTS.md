@@ -150,4 +150,11 @@ pytest --lf
 - `docs/07_IR_Schema.md`: The Source of Truth for the Intermediate Representation.
 - `docs/02_Ban_Do_Lo_Hong_Python.md`: The definitions of vulnerabilities we detect.
 
+## Learned Skills
+
+### Skill: Implement AST Analysis Pass
+- **Definition**: `.opencode/skills/implement-ast-analysis-pass/SKILL.md`
+- **Usage**: Follow this skill workflow when implementing new static analysis features (e.g., Obfuscation Skipper, Type Inference).
+- **Reference Example**: See `src/core/parser/alias_resolver.py` for a complete implementation of this pattern.
+
 *(End of Instructions)*
