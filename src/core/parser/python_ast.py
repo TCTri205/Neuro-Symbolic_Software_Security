@@ -4,6 +4,7 @@ import ast
 import hashlib
 from typing import Any, Dict, List, Optional
 
+from .embedded_lang_detector import detect_embedded_language
 from .ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol, extract_source_code
 from .preprocessing import strip_docstrings
 
@@ -685,6 +686,13 @@ class PythonAstParser:
                 attrs["value_truncated"] = True
             else:
                 attrs["value"] = value
+
+            # Detect embedded languages in string literals
+            if isinstance(value, str):
+                embedded_lang, confidence = detect_embedded_language(value)
+                if embedded_lang is not None:
+                    attrs["embedded_lang"] = embedded_lang
+                    attrs["embedded_lang_confidence"] = confidence
 
             return self._add_node(
                 "Literal",
