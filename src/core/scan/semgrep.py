@@ -5,7 +5,9 @@ from typing import Any, Dict
 
 
 class SemgrepRunner:
-    def __init__(self, config: str = None, timeout: int = 120, executable: str = "semgrep"):
+    def __init__(
+        self, config: str = None, timeout: int = 120, executable: str = "semgrep"
+    ):
         self.config = config or os.getenv("SEMGREP_CONFIG", "auto")
         self.timeout = timeout
         self.executable = executable

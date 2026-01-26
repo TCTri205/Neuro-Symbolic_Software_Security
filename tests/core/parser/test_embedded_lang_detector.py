@@ -4,8 +4,6 @@ Tests for Embedded Language Detection
 Validates detection of SQL, Shell, HTML, JSON, YAML, and RegEx in string literals.
 """
 
-import pytest
-
 from src.core.parser.embedded_lang_detector import (
     EmbeddedLanguageDetector,
     detect_embedded_language,

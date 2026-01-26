@@ -1,5 +1,4 @@
 import os
-import os
 import pytest
 import sqlite3
 from src.librarian.db import LibrarianDB

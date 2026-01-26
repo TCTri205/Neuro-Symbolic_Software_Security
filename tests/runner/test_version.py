@@ -1,6 +1,7 @@
 import unittest
 from src.librarian.version import VersionMatcher
 
+
 class TestVersionMatcher(unittest.TestCase):
     def test_basic_match(self):
         self.assertTrue(VersionMatcher.match("2.0.1", "==2.0.1"))
@@ -24,6 +25,7 @@ class TestVersionMatcher(unittest.TestCase):
         self.assertTrue(VersionMatcher.is_valid("1.0.0"))
         self.assertTrue(VersionMatcher.is_valid("1.0"))
         self.assertFalse(VersionMatcher.is_valid("not_a_version"))
+
 
 if __name__ == "__main__":
     unittest.main()

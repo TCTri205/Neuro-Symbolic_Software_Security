@@ -1,7 +1,6 @@
 import ast
 import tokenize
 from io import BytesIO
-from typing import Optional, Union
 
 
 class DocstringStripper(ast.NodeTransformer):

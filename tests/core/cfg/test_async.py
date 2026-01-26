@@ -1,5 +1,4 @@
 import ast
-import pytest
 from src.core.cfg.builder import CFGBuilder
 
 

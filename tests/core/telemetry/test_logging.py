@@ -1,6 +1,5 @@
 import json
 import logging
-import io
 import pytest
 from src.core.telemetry.logger import setup_logging, get_logger, JSONFormatter
 

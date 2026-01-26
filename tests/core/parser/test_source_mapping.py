@@ -1,4 +1,3 @@
-import pytest
 from src.core.parser.ir import IRSpan, extract_source_code
 from src.core.parser.python_ast import PythonAstParser
 

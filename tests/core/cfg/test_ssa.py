@@ -1,7 +1,6 @@
 import ast
 from src.core.cfg.builder import CFGBuilder
 from src.core.cfg.ssa.transformer import SSATransformer
-from src.core.cfg.models import PhiNode
 
 
 def test_ssa_simple_assign():

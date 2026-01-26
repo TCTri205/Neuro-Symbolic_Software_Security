@@ -1,8 +1,8 @@
 import time
 import json
 import logging
-from typing import Dict, List, Any, Optional
-from dataclasses import dataclass, field
+from typing import Dict, List, Any
+from dataclasses import dataclass
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)

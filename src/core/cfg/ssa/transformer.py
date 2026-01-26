@@ -1,6 +1,6 @@
 import ast
 import networkx as nx
-from typing import Dict, Set, List, DefaultDict, Any, Union, Optional
+from typing import Dict, Set, List, DefaultDict, Any, Optional
 from collections import defaultdict
 from ..models import ControlFlowGraph, PhiNode
 

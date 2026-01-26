@@ -1,6 +1,7 @@
 import pytest
 from src.core.supply_chain.typosquat import TyposquatScanner
 
+
 class TestTyposquatScanner:
     @pytest.fixture
     def scanner(self):
@@ -20,10 +21,10 @@ class TestTyposquatScanner:
     def test_check_package_typosquat(self, scanner):
         # rquests is distance 1 from requests
         assert "requests" in scanner.check_package("rquests")
-        
+
         # djang is distance 1 from django
         assert "django" in scanner.check_package("djang")
-        
+
         # numpyy is distance 1 from numpy
         assert "numpy" in scanner.check_package("numpyy")
 
@@ -53,14 +54,14 @@ class TestTyposquatScanner:
         panda
         """
         results = scanner.scan(content)
-        
+
         # Should detect rquests and panda (typos of requests and pandas)
-        detected_pkgs = {r['package'] for r in results}
+        detected_pkgs = {r["package"] for r in results}
         assert "rquests" in detected_pkgs
         assert "panda" in detected_pkgs
         assert "flask" not in detected_pkgs
-        
+
         # Verify details for rquests
-        rquests_result = next(r for r in results if r['package'] == "rquests")
-        assert "requests" in rquests_result['candidates']
-        assert rquests_result['risk'] == "HIGH"
+        rquests_result = next(r for r in results if r["package"] == "rquests")
+        assert "requests" in rquests_result["candidates"]
+        assert rquests_result["risk"] == "HIGH"

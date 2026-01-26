@@ -1,5 +1,5 @@
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 
 
 class SecurityPromptBuilder:
@@ -19,7 +19,6 @@ class SecurityPromptBuilder:
         Builds a structured prompt for analyzing security findings in a specific code block.
         """
         findings_json = json.dumps(block.security_findings, indent=2)
-        ssa_json = json.dumps(ssa_context, indent=2)
 
         # Calculate approximate lines if block has statements
         start_line = "?"

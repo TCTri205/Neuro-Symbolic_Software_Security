@@ -1,8 +1,7 @@
 import os
-import os
 import shutil
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 from src.report.manager import ReportManager
 from src.report.markdown import MarkdownReporter
 from src.report.sarif import SarifReporter

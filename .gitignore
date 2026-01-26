@@ -155,5 +155,5 @@ nsss_report.sarif
 .codegraph_cache/
 
 # Opencode
-.opencode/
+.opencode/node_modules/
 .opencode_logs/

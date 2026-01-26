@@ -94,7 +94,7 @@ def scan(
     for report_path in generated_reports:
         click.echo(f"  - {report_path}")
 
-    click.echo(f"Reports generated.")
+    click.echo("Reports generated.")
 
     if output_format == "json":
         click.echo(json.dumps(results, indent=2))
