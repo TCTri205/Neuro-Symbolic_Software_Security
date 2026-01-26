@@ -5,10 +5,17 @@ import hashlib
 from typing import Any, Dict, List, Optional
 
 from .ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol
+from .preprocessing import strip_docstrings
 
 
 class PythonAstParser:
-    def __init__(self, source: str, file_path: str, max_literal_len: int = 200) -> None:
+    def __init__(
+        self,
+        source: str,
+        file_path: str,
+        max_literal_len: int = 200,
+        enable_docstring_stripping: bool = False,
+    ) -> None:
         self.source = source
         self.file_path = file_path
         self.graph = IRGraph()
@@ -21,12 +28,15 @@ class PythonAstParser:
         self._symbols: Dict[tuple[str, str], Dict[str, Any]] = {}
         self._loop_stack: List[Dict[str, Optional[str]]] = []
         self.max_literal_len = max_literal_len
+        self.enable_docstring_stripping = enable_docstring_stripping
 
     def _finalize_symbols(self) -> None:
         self.graph.symbols = [IRSymbol(**symbol) for symbol in self._symbols.values()]
 
     def parse(self) -> IRGraph:
         module = ast.parse(self.source)
+        if self.enable_docstring_stripping:
+            strip_docstrings(module)
         self._visit_module(module)
         self._finalize_symbols()
         return self.graph

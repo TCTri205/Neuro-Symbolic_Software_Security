@@ -98,7 +98,9 @@ class AnalysisOrchestrator:
     6. LLM Analysis (with Librarian caching)
     """
 
-    def __init__(self, enable_ir: bool = False):
+    def __init__(
+        self, enable_ir: bool = False, enable_docstring_stripping: bool = False
+    ):
         self.secret_scanner = SecretScanner()
         self.privacy_masker = PrivacyMasker()
         self.sanitizer_registry = SanitizerRegistry()
@@ -106,6 +108,7 @@ class AnalysisOrchestrator:
         self.prompt_builder = SecurityPromptBuilder()
         self.logger = get_logger(__name__)
         self.enable_ir = enable_ir
+        self.enable_docstring_stripping = enable_docstring_stripping
 
         # Determine semgrep config
         rules_path = os.path.join(os.getcwd(), "rules", "nsss-python-owasp.yml")
@@ -142,7 +145,11 @@ class AnalysisOrchestrator:
         if self.enable_ir:
             try:
                 with MeasureLatency("parse_ir"):
-                    parser = PythonAstParser(source_code, file_path)
+                    parser = PythonAstParser(
+                        source_code,
+                        file_path,
+                        enable_docstring_stripping=self.enable_docstring_stripping,
+                    )
                     result.ir = parser.parse().model_dump(by_alias=True)
             except Exception as e:
                 msg = f"IR parsing failed: {e}"

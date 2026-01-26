@@ -36,8 +36,22 @@ def cli():
     default=False,
     help="Include parsed IR in output JSON.",
 )
+@click.option(
+    "--strip-docstrings",
+    is_flag=True,
+    default=False,
+    help="Strip docstrings from IR.",
+)
 @click.option("--report-dir", default=".", help="Directory to save reports.")
-def scan(target_path, mode, output_format, report_types, emit_ir, report_dir):
+def scan(
+    target_path,
+    mode,
+    output_format,
+    report_types,
+    emit_ir,
+    strip_docstrings,
+    report_dir,
+):
     """
     Scan a target directory or file.
     """
@@ -54,7 +68,9 @@ def scan(target_path, mode, output_format, report_types, emit_ir, report_dir):
     import json
 
     click.echo("Running analysis pipeline...")
-    orchestrator = AnalysisOrchestrator(enable_ir=emit_ir)
+    orchestrator = AnalysisOrchestrator(
+        enable_ir=emit_ir, enable_docstring_stripping=strip_docstrings
+    )
     results = {}
 
     if os.path.isfile(target_path):
