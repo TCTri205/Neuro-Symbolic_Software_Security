@@ -6,6 +6,7 @@ import json
 
 from src.core.cfg.builder import CFGBuilder
 from src.core.cfg.callgraph import CallGraph, CallGraphBuilder
+from src.core.cfg.synthetic import SyntheticEdgeBuilder
 from src.core.cfg.ssa.transformer import SSATransformer
 from src.core.parser import PythonAstParser
 from src.core.parser.obfuscation import detect_obfuscation, is_binary_extension
@@ -246,6 +247,10 @@ class AnalysisOrchestrator:
 
                 # Phase 2: Build Call Graph from CFG
                 cg_builder.build_from_cfg(cfg)
+
+                # Phase 3: Add Synthetic Edges (Implicit Flows)
+                synth_builder = SyntheticEdgeBuilder(call_graph)
+                synth_builder.process(tree, cfg)
 
                 result.cfg = cfg
                 result.call_graph = call_graph

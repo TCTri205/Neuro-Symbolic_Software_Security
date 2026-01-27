@@ -2,6 +2,7 @@ from .models import ControlFlowGraph, BasicBlock
 from .builder import CFGBuilder
 from .signature import SignatureExtractor, FunctionSignature
 from .callgraph import CallGraphBuilder
+from .synthetic import SyntheticEdgeBuilder
 
 __all__ = [
     "ControlFlowGraph",
@@ -10,4 +11,5 @@ __all__ = [
     "SignatureExtractor",
     "FunctionSignature",
     "CallGraphBuilder",
+    "SyntheticEdgeBuilder",
 ]
