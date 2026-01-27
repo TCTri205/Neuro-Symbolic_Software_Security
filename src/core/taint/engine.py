@@ -1,4 +1,4 @@
-from typing import List, Dict, Set, Optional, Any
+from typing import List, Dict, Set, Optional, Any, Tuple
 from pydantic import BaseModel, Field
 import ast
 from ..cfg.models import ControlFlowGraph
@@ -147,6 +147,11 @@ class TaintEngine:
         source_versions: Set[str] = set()
         worklist: List[str] = []
 
+        stmt_blocks = self._build_statement_blocks(cfg)
+        control_successors = self._build_control_successors(cfg)
+        control_tainted: Set[Tuple[int, str]] = set()
+        control_regions_cache: Dict[int, Set[int]] = {}
+
         version_defs = self._build_version_definitions(cfg, ssa_map)
 
         # 1. Sources
@@ -176,6 +181,22 @@ class TaintEngine:
                     if new_ver not in taint_provenance:
                         taint_provenance[new_ver] = source
                         worklist.append(new_ver)
+
+                block_id = stmt_blocks.get(stmt)
+                if block_id is not None and self._is_control_stmt(
+                    stmt, block_id, control_successors
+                ):
+                    self._apply_control_taint(
+                        cfg,
+                        ssa_map,
+                        block_id,
+                        source,
+                        taint_provenance,
+                        worklist,
+                        control_successors,
+                        control_tainted,
+                        control_regions_cache,
+                    )
 
             # Phi uses
             for block in cfg._blocks.values():
@@ -209,6 +230,103 @@ class TaintEngine:
                             )
 
         return results
+
+    def _build_statement_blocks(self, cfg: ControlFlowGraph) -> Dict[ast.AST, int]:
+        stmt_blocks: Dict[ast.AST, int] = {}
+        for block in cfg._blocks.values():
+            for stmt in block.statements:
+                stmt_blocks[stmt] = block.id
+        return stmt_blocks
+
+    def _build_control_successors(self, cfg: ControlFlowGraph) -> Dict[int, List[int]]:
+        control_labels = {
+            "True",
+            "False",
+            "Next",
+            "Stop",
+            "AsyncNext",
+            "AsyncStop",
+        }
+        control_successors: Dict[int, List[int]] = {}
+        for source, target, data in cfg.graph.edges(data=True):
+            label = data.get("label") if data else None
+            if label in control_labels:
+                control_successors.setdefault(source, []).append(target)
+        return control_successors
+
+    def _is_control_stmt(
+        self,
+        stmt: ast.AST,
+        block_id: int,
+        control_successors: Dict[int, List[int]],
+    ) -> bool:
+        if block_id not in control_successors:
+            return False
+        return not isinstance(stmt, ast.stmt)
+
+    def _apply_control_taint(
+        self,
+        cfg: ControlFlowGraph,
+        ssa_map: Dict[ast.AST, str],
+        block_id: int,
+        source: str,
+        taint_provenance: Dict[str, str],
+        worklist: List[str],
+        control_successors: Dict[int, List[int]],
+        control_tainted: Set[Tuple[int, str]],
+        control_regions_cache: Dict[int, Set[int]],
+    ) -> None:
+        succs = control_successors.get(block_id)
+        if not succs:
+            return
+
+        if block_id not in control_regions_cache:
+            control_regions_cache[block_id] = self._compute_control_region(cfg, succs)
+
+        for tainted_block_id in control_regions_cache[block_id]:
+            if (tainted_block_id, source) in control_tainted:
+                continue
+            control_tainted.add((tainted_block_id, source))
+            block = cfg.get_block(tainted_block_id)
+            if not block:
+                continue
+            for stmt in block.statements:
+                defined_vars = self._get_defined_vars(stmt, ssa_map)
+                for new_ver in defined_vars:
+                    if new_ver not in taint_provenance:
+                        taint_provenance[new_ver] = source
+                        worklist.append(new_ver)
+
+    def _compute_control_region(
+        self, cfg: ControlFlowGraph, succs: List[int]
+    ) -> Set[int]:
+        reachable_sets: List[Set[int]] = []
+        for succ in succs:
+            reachable_sets.append(self._collect_reachable(cfg, succ, set()))
+
+        if not reachable_sets:
+            return set()
+
+        join_nodes = set.intersection(*reachable_sets)
+        region: Set[int] = set()
+        for succ in succs:
+            region.update(self._collect_reachable(cfg, succ, join_nodes))
+        return region
+
+    def _collect_reachable(
+        self, cfg: ControlFlowGraph, start: int, stop_nodes: Set[int]
+    ) -> Set[int]:
+        visited: Set[int] = set()
+        stack = [start]
+        while stack:
+            node = stack.pop()
+            if node in visited or node in stop_nodes:
+                continue
+            visited.add(node)
+            for succ in cfg.graph.successors(node):
+                if succ not in visited:
+                    stack.append(succ)
+        return visited
 
     def _build_version_definitions(
         self, cfg: ControlFlowGraph, ssa_map: Dict[ast.AST, str]
