@@ -1,6 +1,5 @@
-import os
 import time
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI
 from src.core.ai.client import LLMClient
 from src.core.ai.gateway import LLMGatewayService
 from src.core.ai.protocol import (
@@ -9,23 +8,15 @@ from src.core.ai.protocol import (
     AnalysisData,
     ConstraintCheck,
 )
+from src.server.auth import APIKeyMiddleware
 
 
 app = FastAPI()
-
-
-def _require_api_key(x_api_key: str | None) -> None:
-    expected = os.getenv("NSSS_API_KEY")
-    if expected and x_api_key != expected:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+app.add_middleware(APIKeyMiddleware)
 
 
 @app.post("/analyze", response_model=AnalysisResponse)
-def analyze(
-    request: AnalysisRequest, x_api_key: str | None = Header(None)
-) -> AnalysisResponse:
-    _require_api_key(x_api_key)
-
+def analyze(request: AnalysisRequest) -> AnalysisResponse:
     start_time = time.time()
 
     system_prompt = "You are a software security expert. Respond succinctly."
