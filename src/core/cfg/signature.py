@@ -1,6 +1,6 @@
 from typing import List, Dict, Optional, Union
 import ast
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from .models import ControlFlowGraph, BasicBlock
 
 
@@ -10,6 +10,11 @@ class FunctionSignature(BaseModel):
     outputs: List[str]  # ["int"]
     calls: List[str]  # ["print", "calculate"]
     complexity: int = 1
+    side_effects: List[str] = Field(
+        default_factory=list
+    )  # ["global:write:x", "io:print"]
+    taint_sources: List[str] = Field(default_factory=list)  # ["arg:password"]
+    taint_sinks: List[str] = Field(default_factory=list)  # ["call:execute"]
 
 
 class SignatureExtractor:
@@ -63,9 +68,16 @@ class SignatureExtractor:
         if not outputs:
             outputs = ["Any"]
 
-        # 3. Calls & Complexity
+        # 3. Calls & Complexity & Side Effects
         calls = set()
         complexity = 0
+        side_effects = set()
+
+        # Check for global writes (Global keyword in function body)
+        for stmt in node.body:
+            if isinstance(stmt, ast.Global):
+                for global_name in stmt.names:
+                    side_effects.add(f"global:write:{global_name}")
 
         for block in blocks:
             # Estimate complexity: count branching (2 edges out)
@@ -79,6 +91,15 @@ class SignatureExtractor:
                         func_name = self._get_func_name(subnode)
                         if func_name:
                             calls.add(func_name)
+                            # Simple heuristic for side effects
+                            if func_name == "print":
+                                side_effects.add("io:print")
+                            elif func_name in ["open", "write"]:
+                                side_effects.add(f"io:{func_name}")
+                            elif func_name.startswith(
+                                "requests."
+                            ) or func_name.startswith("urllib."):
+                                side_effects.add(f"net:{func_name}")
 
         return FunctionSignature(
             name=name,
@@ -86,6 +107,9 @@ class SignatureExtractor:
             outputs=outputs,
             calls=sorted(list(calls)),
             complexity=complexity + 1,  # +1 for base path
+            side_effects=sorted(list(side_effects)),
+            taint_sources=[],  # Placeholder for future taint analysis
+            taint_sinks=[],  # Placeholder for future taint analysis
         )
 
     def _get_func_name(self, call_node: ast.Call) -> Optional[str]:

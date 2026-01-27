@@ -60,3 +60,58 @@ def process_data(data: list) -> None:
     # If has pred (split to then/else) -> out degree 2 -> +1
     # So complexity should be 1 + 1 + 1 = 3.
     assert sig.complexity >= 3
+
+
+def test_signature_side_effects():
+    import textwrap
+
+    code = textwrap.dedent("""
+    x = 0
+    def modify_global():
+        global x
+        x = 1
+        print("Modified x")
+
+    def network_call():
+        import requests
+        requests.get("http://example.com")
+    """)
+    node = ast.parse(code)
+
+    builder = CFGBuilder()
+    cfg = builder.build("test_side_effects", node)
+
+    extractor = SignatureExtractor(cfg)
+    signatures = extractor.extract()
+
+    # Find modify_global
+    sig_global = next(s for s in signatures if s.name == "modify_global")
+    # We expect global write detection
+    assert any("global:write:x" in se for se in sig_global.side_effects)
+    # We expect io detection
+    assert any("io:print" in se for se in sig_global.side_effects)
+
+    # Find network_call
+    sig_net = next(s for s in signatures if s.name == "network_call")
+    # We expect network detection (heuristic)
+    assert any("net:requests.get" in se for se in sig_net.side_effects)
+
+
+def test_signature_taint_fields_exist():
+    code = """
+def sensitive_func(password: str):
+    pass
+    """
+    node = ast.parse(code)
+    builder = CFGBuilder()
+    cfg = builder.build("test_taint", node)
+
+    extractor = SignatureExtractor(cfg)
+    signatures = extractor.extract()
+    sig = signatures[0]
+
+    # Verify fields exist (even if empty for now, unless we implement heuristics)
+    assert hasattr(sig, "taint_sources")
+    assert hasattr(sig, "taint_sinks")
+    assert isinstance(sig.taint_sources, list)
+    assert isinstance(sig.taint_sinks, list)
