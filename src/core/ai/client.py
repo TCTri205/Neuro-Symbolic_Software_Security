@@ -468,6 +468,10 @@ class LLMClient(AIClient):
 class AIClientFactory:
     @staticmethod
     def get_client(provider: str = "mock", **kwargs) -> AIClient:
+        if provider in ("server", "remote"):
+            from src.core.ai.remote import RemoteAIClient
+
+            return RemoteAIClient(**kwargs)
         if provider in ("openai", "gemini", "google", "auto"):
             # Pass provider to the generic client
             return LLMClient(provider=provider, **kwargs)

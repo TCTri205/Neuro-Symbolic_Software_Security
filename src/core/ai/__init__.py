@@ -1,5 +1,6 @@
 from .client import AIClient, MockAIClient, LLMClient, AIClientFactory
 from .cache import CacheKeyGenerator
+from .remote import RemoteAIClient
 
 __all__ = [
     "AIClient",
@@ -7,4 +8,5 @@ __all__ = [
     "LLMClient",
     "AIClientFactory",
     "CacheKeyGenerator",
+    "RemoteAIClient",
 ]
