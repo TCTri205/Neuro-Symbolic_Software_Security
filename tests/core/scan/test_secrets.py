@@ -31,6 +31,22 @@ def test_regex_detection_private_key(scanner):
     assert any(m.type == "Private Key" for m in matches)
 
 
+def test_regex_detection_github_token(scanner):
+    # Construct token dynamically to avoid committing a "secret" pattern
+    token_val = "ghp_" + "1" * 36
+    content = f"token = '{token_val}'"
+    matches = scanner.scan(content)
+    assert any(m.type == "GitHub Token" for m in matches)
+
+
+def test_regex_detection_stripe_key(scanner):
+    # Construct key dynamically to avoid committing a "secret" pattern
+    key_val = "sk_live_" + "1" * 24
+    content = f"stripe_key = '{key_val}'"
+    matches = scanner.scan(content)
+    assert any(m.type == "Stripe Secret Key" for m in matches)
+
+
 def test_high_entropy_string_detection(scanner):
     # A random API key looking string without specific prefix
     content = "api_secret = 'zbK7#9L1@mP2$xR5qY8n'"

@@ -25,6 +25,8 @@ class SecretScanner:
             "Private Key": re.compile(r"-----BEGIN [A-Z ]+ PRIVATE KEY-----"),
             "Google API Key": re.compile(r"AIza[0-9A-Za-z\\-_]{35}"),
             "Slack Token": re.compile(r"xox[baprs]-([0-9a-zA-Z]{10,48})?"),
+            "GitHub Token": re.compile(r"ghp_[a-zA-Z0-9]{36}"),
+            "Stripe Secret Key": re.compile(r"sk_live_[0-9a-zA-Z]{24}"),
         }
 
         # Threshold for high entropy (experimentally determined, usually > 3.0 for alphanumeric secrets)
