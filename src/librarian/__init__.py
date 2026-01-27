@@ -7,6 +7,13 @@ from .models import (
     ParameterSpec,
 )
 from .registry import ProfileRegistry
+from .manual_models import (
+    ManualModelBuilder,
+    build_os_profile,
+    build_subprocess_profile,
+    build_pickle_profile,
+    get_stdlib_profile,
+)
 
 __all__ = [
     "Librarian",
@@ -16,4 +23,9 @@ __all__ = [
     "SecurityLabel",
     "ParameterSpec",
     "ProfileRegistry",
+    "ManualModelBuilder",
+    "build_os_profile",
+    "build_subprocess_profile",
+    "build_pickle_profile",
+    "get_stdlib_profile",
 ]
