@@ -26,6 +26,7 @@ class TaintFlow(BaseModel):
     path: List[str] = Field(
         default_factory=list
     )  # List of SSA versions or statement IDs
+    implicit: bool = False
 
 
 class TaintResult(BaseModel):
@@ -151,6 +152,7 @@ class TaintEngine:
         control_successors = self._build_control_successors(cfg)
         control_tainted: Set[Tuple[int, str]] = set()
         control_regions_cache: Dict[int, Set[int]] = {}
+        implicit_versions: Set[str] = set()
 
         version_defs = self._build_version_definitions(cfg, ssa_map)
 
@@ -170,6 +172,7 @@ class TaintEngine:
         while worklist:
             ver = worklist.pop(0)
             source = taint_provenance[ver]
+            is_implicit = ver in implicit_versions
 
             # Stmt uses
             uses = version_uses.get(ver, [])
@@ -180,6 +183,8 @@ class TaintEngine:
                 for new_ver in defined_vars:
                     if new_ver not in taint_provenance:
                         taint_provenance[new_ver] = source
+                        if is_implicit:
+                            implicit_versions.add(new_ver)
                         worklist.append(new_ver)
 
                 block_id = stmt_blocks.get(stmt)
@@ -196,6 +201,7 @@ class TaintEngine:
                         control_successors,
                         control_tainted,
                         control_regions_cache,
+                        implicit_versions,
                     )
 
             # Phi uses
@@ -204,6 +210,8 @@ class TaintEngine:
                     if ver in phi.operands.values():
                         if phi.result not in taint_provenance:
                             taint_provenance[phi.result] = source
+                            if ver in implicit_versions:
+                                implicit_versions.add(phi.result)
                             worklist.append(phi.result)
 
         # 3. Sinks
@@ -226,7 +234,14 @@ class TaintEngine:
                         )
                         for path in paths:
                             results.append(
-                                TaintFlow(source=src_name, sink=sink_name, path=path)
+                                TaintFlow(
+                                    source=src_name,
+                                    sink=sink_name,
+                                    path=path,
+                                    implicit=any(
+                                        ver in implicit_versions for ver in path
+                                    ),
+                                )
                             )
 
         return results
@@ -275,6 +290,7 @@ class TaintEngine:
         control_successors: Dict[int, List[int]],
         control_tainted: Set[Tuple[int, str]],
         control_regions_cache: Dict[int, Set[int]],
+        implicit_versions: Set[str],
     ) -> None:
         succs = control_successors.get(block_id)
         if not succs:
@@ -295,6 +311,7 @@ class TaintEngine:
                 for new_ver in defined_vars:
                     if new_ver not in taint_provenance:
                         taint_provenance[new_ver] = source
+                        implicit_versions.add(new_ver)
                         worklist.append(new_ver)
 
     def _compute_control_region(
