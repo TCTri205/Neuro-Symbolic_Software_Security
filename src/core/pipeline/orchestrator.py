@@ -13,11 +13,40 @@ from src.core.scan.secrets import SecretScanner, SecretMatch
 from src.core.privacy.masker import PrivacyMasker
 from src.core.analysis.sanitizers import SanitizerRegistry
 from src.core.telemetry import get_logger, MeasureLatency
+from src.core.risk.ranker import RankerService
+from src.core.risk.routing import RoutingService
+from src.core.risk.schema import RankerOutput, RoutingPlan
+from src.core.taint.engine import (
+    TaintConfiguration,
+    TaintEngine,
+    TaintFlow,
+    TaintSink,
+    TaintSource,
+)
 
 from src.core.ai.prompts import SecurityPromptBuilder
 from src.core.scan.semgrep import SemgrepRunner
 from src.core.ai.client import LLMClient
 from src.librarian import Librarian
+
+DEFAULT_TAINT_SOURCES = [
+    "input",
+    "os.getenv",
+    "getenv",
+    "request.args.get",
+    "request.form.get",
+    "request.get_json",
+]
+
+DEFAULT_TAINT_SINKS = [
+    "exec",
+    "eval",
+    "os.system",
+    "subprocess.run",
+    "subprocess.call",
+    "open",
+    "print",
+]
 
 
 @dataclass
@@ -31,6 +60,9 @@ class AnalysisResult:
     secrets: List[SecretMatch] = field(default_factory=list)
     masked_code: Optional[str] = None
     mask_mapping: Optional[Dict[str, str]] = None
+    taint_flows: List[TaintFlow] = field(default_factory=list)
+    ranker_output: Optional[RankerOutput] = None
+    routing: Optional[RoutingPlan] = None
     errors: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -84,6 +116,12 @@ class AnalysisResult:
         }
         if self.ir:
             payload["ir"] = self.ir
+        if self.taint_flows:
+            payload["taint_flows"] = [flow.model_dump() for flow in self.taint_flows]
+        if self.ranker_output:
+            payload["risk"] = self.ranker_output.model_dump()
+        if self.routing:
+            payload["routing"] = self.routing.model_dump()
         return payload
 
 
@@ -99,7 +137,10 @@ class AnalysisOrchestrator:
     """
 
     def __init__(
-        self, enable_ir: bool = False, enable_docstring_stripping: bool = False
+        self,
+        enable_ir: bool = False,
+        enable_docstring_stripping: bool = False,
+        taint_config: Optional[TaintConfiguration] = None,
     ):
         self.secret_scanner = SecretScanner()
         self.privacy_masker = PrivacyMasker()
@@ -109,6 +150,14 @@ class AnalysisOrchestrator:
         self.logger = get_logger(__name__)
         self.enable_ir = enable_ir
         self.enable_docstring_stripping = enable_docstring_stripping
+        self.taint_engine = TaintEngine()
+        self.ranker = RankerService()
+        self.router = RoutingService()
+        self.taint_config = taint_config or TaintConfiguration(
+            sources=[TaintSource(name=source) for source in DEFAULT_TAINT_SOURCES],
+            sinks=[TaintSink(name=sink) for sink in DEFAULT_TAINT_SINKS],
+            sanitizers=list(SanitizerRegistry._DEFAULT_MAPPING.keys()),
+        )
 
         # Determine semgrep config
         rules_path = os.path.join(os.getcwd(), "rules", "nsss-python-owasp.yml")
@@ -213,6 +262,20 @@ class AnalysisOrchestrator:
                 result.ssa = ssa
         except Exception as e:
             msg = f"SSA transformation failed: {e}"
+            self.logger.error(msg)
+            result.errors.append(msg)
+
+        # Step 4.5: Taint Analysis + Ranking + Routing
+        try:
+            with MeasureLatency("taint_ranking"):
+                if result.ssa and result.cfg:
+                    result.taint_flows = self.taint_engine.analyze(
+                        result.cfg, result.ssa.ssa_map, self.taint_config
+                    )
+                    result.ranker_output = self.ranker.rank(result.taint_flows)
+                    result.routing = self.router.route(result.ranker_output)
+        except Exception as e:
+            msg = f"Taint ranking failed: {e}"
             self.logger.error(msg)
             result.errors.append(msg)
 

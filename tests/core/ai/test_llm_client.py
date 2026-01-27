@@ -32,13 +32,11 @@ foo()
                 ]
             }
 
-            with patch(
-                "src.core.pipeline.orchestrator.SemgrepRunner"
-            ) as mock_runner, patch(
-                "src.core.pipeline.orchestrator.LLMClient"
-            ) as mock_llm, patch(
-                "src.core.pipeline.orchestrator.Librarian"
-            ) as mock_librarian:
+            with (
+                patch("src.core.pipeline.orchestrator.SemgrepRunner") as mock_runner,
+                patch("src.core.pipeline.orchestrator.LLMClient") as mock_llm,
+                patch("src.core.pipeline.orchestrator.Librarian") as mock_librarian,
+            ):
                 mock_runner.return_value.run.return_value = mock_semgrep
 
                 # Ensure librarian returns None to force LLM call
@@ -107,13 +105,11 @@ def insecure():
                 )
             }
 
-            with patch(
-                "src.core.pipeline.orchestrator.SemgrepRunner"
-            ) as mock_runner, patch(
-                "src.core.pipeline.orchestrator.LLMClient"
-            ) as mock_llm, patch(
-                "src.core.pipeline.orchestrator.Librarian"
-            ) as mock_librarian:
+            with (
+                patch("src.core.pipeline.orchestrator.SemgrepRunner") as mock_runner,
+                patch("src.core.pipeline.orchestrator.LLMClient") as mock_llm,
+                patch("src.core.pipeline.orchestrator.Librarian") as mock_librarian,
+            ):
                 mock_runner.return_value.run.return_value = mock_semgrep
 
                 mock_librarian.return_value.query.return_value = None

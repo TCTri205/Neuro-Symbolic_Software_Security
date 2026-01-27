@@ -13,6 +13,12 @@ class RiskLevel(str, Enum):
     UNKNOWN = "UNKNOWN"
 
 
+class RoutingTarget(str, Enum):
+    LLM = "LLM"
+    RULES = "RULES"
+    HUMAN = "HUMAN"
+
+
 class RiskSignal(BaseModel):
     name: str
     weight: float = Field(..., ge=0.0, le=1.0)
@@ -38,6 +44,20 @@ class RiskScoreItem(BaseModel):
     risk: RiskScore
     signals: List[RiskSignal] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+class RoutingDecision(BaseModel):
+    target: RoutingTarget
+    risk_level: RiskLevel
+    risk_score: float = Field(..., ge=0.0, le=100.0)
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    check_id: Optional[str] = None
+    rationale: Optional[str] = None
+
+
+class RoutingPlan(BaseModel):
+    overall: Optional[RoutingDecision] = None
+    items: List[RoutingDecision] = Field(default_factory=list)
 
 
 class RankerOutput(BaseModel):

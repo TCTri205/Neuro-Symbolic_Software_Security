@@ -225,10 +225,7 @@ version = "2.0.3"
             # Create malformed requirements.txt
             req_file = Path(tmpdir) / "requirements.txt"
             req_file.write_text(
-                "Flask==2.0.1\n"
-                "this is invalid line\n"
-                "requests>=2.25.0\n"
-                "===broken===\n"
+                "Flask==2.0.1\nthis is invalid line\nrequests>=2.25.0\n===broken===\n"
             )
 
             resolver = DependencyResolver(tmpdir)

@@ -129,11 +129,10 @@ def foo():
                 )
             }
 
-            with patch(
-                "src.core.pipeline.orchestrator.SemgrepRunner"
-            ) as mock_runner, patch(
-                "src.core.pipeline.orchestrator.LLMClient"
-            ) as mock_llm:
+            with (
+                patch("src.core.pipeline.orchestrator.SemgrepRunner") as mock_runner,
+                patch("src.core.pipeline.orchestrator.LLMClient") as mock_llm,
+            ):
                 mock_runner.return_value.run.return_value = mock_semgrep
 
                 llm_instance = mock_llm.return_value

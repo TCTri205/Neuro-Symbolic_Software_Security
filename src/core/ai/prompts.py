@@ -55,12 +55,12 @@ class SecurityPromptBuilder:
             f"5. IMPORTANT: Return ONLY valid JSON. No markdown code blocks around the JSON.\n\n"
             f"=== OUTPUT FORMAT ===\n"
             f"{{\n"
-            f"  \"analysis\": [\n"
+            f'  "analysis": [\n'
             f"    {{\n"
-            f"      \"check_id\": \"<id from findings>\",\n"
-            f"      \"verdict\": \"<classification>\",\n"
-            f"      \"rationale\": \"<concise explanation>\",\n"
-            f"      \"remediation\": \"<code fix or 'N/A'>\"\n"
+            f'      "check_id": "<id from findings>",\n'
+            f'      "verdict": "<classification>",\n'
+            f'      "rationale": "<concise explanation>",\n'
+            f'      "remediation": "<code fix or \'N/A\'>"\n'
             f"    }}\n"
             f"  ]\n"
             f"}}"

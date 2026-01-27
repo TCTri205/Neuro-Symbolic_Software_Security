@@ -28,9 +28,11 @@ def test_generate_all_success(temp_report_dir, mock_results):
 
     # Mock reporters to avoid actual file writing logic in unit test
     # But we want to verify the manager logic
-    with patch.object(MarkdownReporter, "generate") as mock_md, patch.object(
-        SarifReporter, "generate"
-    ) as mock_sarif, patch.object(IRReporter, "generate") as mock_ir:
+    with (
+        patch.object(MarkdownReporter, "generate") as mock_md,
+        patch.object(SarifReporter, "generate") as mock_sarif,
+        patch.object(IRReporter, "generate") as mock_ir,
+    ):
         generated = manager.generate_all(mock_results)
 
         assert len(generated) == 3
@@ -57,11 +59,13 @@ def test_generate_all_create_dir_failure(temp_report_dir, mock_results):
 def test_reporter_failure_resilience(temp_report_dir, mock_results):
     manager = ReportManager(temp_report_dir)
 
-    with patch.object(
-        MarkdownReporter, "generate", side_effect=Exception("MD Failed")
-    ) as mock_md, patch.object(SarifReporter, "generate") as mock_sarif, patch.object(
-        IRReporter, "generate"
-    ) as mock_ir:
+    with (
+        patch.object(
+            MarkdownReporter, "generate", side_effect=Exception("MD Failed")
+        ) as mock_md,
+        patch.object(SarifReporter, "generate") as mock_sarif,
+        patch.object(IRReporter, "generate") as mock_ir,
+    ):
         generated = manager.generate_all(mock_results)
 
         # Should still generate SARIF + IR even if MD fails
@@ -77,9 +81,10 @@ def test_reporter_failure_resilience(temp_report_dir, mock_results):
 def test_report_type_filtering(temp_report_dir, mock_results):
     manager = ReportManager(temp_report_dir, report_types=["markdown"])
 
-    with patch.object(MarkdownReporter, "generate") as mock_md, patch.object(
-        SarifReporter, "generate"
-    ) as mock_sarif:
+    with (
+        patch.object(MarkdownReporter, "generate") as mock_md,
+        patch.object(SarifReporter, "generate") as mock_sarif,
+    ):
         generated = manager.generate_all(mock_results)
 
         assert len(generated) == 1
