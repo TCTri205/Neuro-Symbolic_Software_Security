@@ -15,7 +15,10 @@ SAMPLE_ROW = {
 def mock_llm_client():
     client = MagicMock()
     # Mock teacher reasoning
-    client.generate.return_value = "<thinking>The code uses eval on user input...</thinking>{'is_vulnerable': true}"
+    client.generate.side_effect = [
+        '<thinking>Unsafe</thinking>{"is_vulnerable": true, "risk_level": "CRITICAL"}',
+        '<thinking>Safe</thinking>{"is_vulnerable": false, "risk_level": "SAFE"}',
+    ]
     return client
 
 
@@ -45,7 +48,13 @@ def test_data_factory_process_row(mock_llm_client):
 
 def test_privacy_masking_integration():
     # Real masker test inside factory
-    factory = DataFactory(teacher_model=MagicMock())
+    mock_llm = MagicMock()
+    # Return valid JSON to avoid crashes during generation
+    mock_llm.generate.return_value = (
+        '<thinking>Ok</thinking>{"is_vulnerable": true, "risk_level": "HIGH"}'
+    )
+
+    factory = DataFactory(teacher_model=mock_llm)
     row = {
         "code_before": "def login(username, password):\n    q = 'SELECT * FROM users WHERE u=' + username",
         "code_after": "def login(username, password):\n    q = 'SELECT...'",

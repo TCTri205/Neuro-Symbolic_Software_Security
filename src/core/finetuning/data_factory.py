@@ -3,7 +3,7 @@ import ast
 import dataclasses
 from typing import List, Dict, Any, Optional, Set
 from src.core.privacy.masker import PrivacyMasker
-from src.core.ai.cot import extract_cot
+from src.core.finetuning.teacher import TeacherGenerator
 
 
 @dataclasses.dataclass
@@ -28,7 +28,10 @@ class DataFactory:
         Args:
             teacher_model: An LLMClient instance (or mock) to generate synthetic reasoning.
         """
-        self.teacher_model = teacher_model
+        if teacher_model:
+            self.teacher = TeacherGenerator(teacher_model)
+        else:
+            self.teacher = None
         self.masker = PrivacyMasker(preserve_builtins=True)
 
     def process_row(self, row: Dict[str, str]) -> List[TrainingExample]:
@@ -108,47 +111,10 @@ class DataFactory:
         Uses Teacher Model to generate reasoning and structured analysis.
         Fallback to template if no teacher available.
         """
-        if self.teacher_model:
-            # Construct Prompt
-            prompt = (
-                f"You are a Senior Security Engineer. Analyze this Python code for {vuln_type}.\n"
-                f"Code:\n{code}\n\n"
-                f"Task:\n"
-                f"1. Determine if it is vulnerable. (Truth: {is_vulnerable})\n"
-                f"2. Explain why.\n"
-                f"3. Provide a secure fix (if vulnerable).\n"
-                f"4. Output in JSON format compatible with NSSS Protocol.\n"
-                f"5. Include <thinking> tags before JSON."
-            )
-            try:
-                response = self.teacher_model.generate(prompt)
-                clean_json_str, _ = extract_cot(response)
-
-                # Try to parse
-                output_obj = json.loads(clean_json_str)
-
-                # Force Ground Truth (Teacher might be wrong, but we trust the dataset label more)
-                output_obj["is_vulnerable"] = is_vulnerable
-
-                # Normalize Risk Level
-                if is_vulnerable:
-                    output_obj["risk_level"] = output_obj.get(
-                        "risk_level", "HIGH"
-                    ).upper()
-                    if output_obj["risk_level"] not in [
-                        "LOW",
-                        "MEDIUM",
-                        "HIGH",
-                        "CRITICAL",
-                    ]:
-                        output_obj["risk_level"] = "HIGH"
-                else:
-                    output_obj["risk_level"] = "SAFE"
-
-                return output_obj
-            except Exception:
-                # Log error?
-                pass
+        if self.teacher:
+            result = self.teacher.generate(code, vuln_type, is_vulnerable)
+            if result:
+                return result
 
         # Fallback / Template
         return {
