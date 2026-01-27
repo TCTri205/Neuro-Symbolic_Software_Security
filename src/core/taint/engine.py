@@ -165,6 +165,8 @@ class TaintEngine:
             # Stmt uses
             uses = version_uses.get(ver, [])
             for stmt in uses:
+                if self._is_sanitizer_stmt(stmt, config):
+                    continue
                 defined_vars = self._get_defined_vars(stmt, ssa_map)
                 for new_ver in defined_vars:
                     if new_ver not in taint_provenance:
@@ -245,13 +247,40 @@ class TaintEngine:
             return self._check_call(stmt.value, config.sinks)
         return None
 
+    def _is_sanitizer_stmt(self, stmt: ast.AST, config: TaintConfiguration) -> bool:
+        if isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Call):
+            return self._check_call(stmt.value, config.sanitizers) is not None
+        if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.value, ast.Call):
+            return self._check_call(stmt.value, config.sanitizers) is not None
+        if isinstance(stmt, ast.AugAssign) and isinstance(stmt.value, ast.Call):
+            return self._check_call(stmt.value, config.sanitizers) is not None
+        return False
+
     def _check_call(self, call: ast.Call, candidates: List[Any]) -> Optional[str]:
-        # Simple check: func is a Name and id matches
+        name = self._get_call_name(call)
+        if not name:
+            return None
+        for c in candidates:
+            candidate_name = c.name if hasattr(c, "name") else c
+            if candidate_name == name:
+                return name
+        return None
+
+    def _get_call_name(self, call: ast.Call) -> Optional[str]:
         if isinstance(call.func, ast.Name):
-            name = call.func.id
-            for c in candidates:
-                if c.name == name:
-                    return name
+            return call.func.id
+        if isinstance(call.func, ast.Attribute):
+            return self._format_attribute(call.func)
+        return None
+
+    def _format_attribute(self, node: ast.AST) -> Optional[str]:
+        if isinstance(node, ast.Attribute):
+            base = self._format_attribute(node.value)
+            if base is None:
+                return None
+            return f"{base}.{node.attr}"
+        if isinstance(node, ast.Name):
+            return node.id
         return None
 
     def _is_stmt_tainted(
