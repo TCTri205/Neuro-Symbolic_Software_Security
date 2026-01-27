@@ -1,0 +1,62 @@
+rules:
+  - id: cwe-78-os-injection
+    patterns:
+      - pattern-either:
+          - pattern: os.system(...)
+          - pattern: os.popen(...)
+          - pattern: subprocess.run(..., shell=True, ...)
+          - pattern: subprocess.call(..., shell=True, ...)
+          - pattern: subprocess.Popen(..., shell=True, ...)
+    message: "OS Command Injection (CWE-78)"
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-78"
+
+  - id: cwe-502-deserialization
+    patterns:
+      - pattern-either:
+          - pattern: pickle.loads(...)
+          - pattern: pickle.load(...)
+          - pattern: _pickle.loads(...)
+          - pattern: _pickle.load(...)
+          - pattern: yaml.load(...)
+          - pattern: torch.load(...)
+    message: "Insecure Deserialization (CWE-502)"
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-502"
+
+  - id: cwe-94-code-injection
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)
+          - pattern: compile(...)
+    message: "Code Injection (CWE-94)"
+    languages: [python]
+    severity: ERROR
+    metadata:
+      cwe: "CWE-94"
+
+  - id: cwe-89-sqli
+    patterns:
+      - pattern-either:
+          - pattern: $CURSOR.execute(...)
+          - pattern: $DB.execute(...)
+    # Note: This is a broad audit rule.
+    message: "Potential SQL Injection (CWE-89)"
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-89"
+
+  - id: cwe-1336-ssti
+    patterns:
+      - pattern: jinja2.Template(...)
+    message: "Potential SSTI (CWE-1336)"
+    languages: [python]
+    severity: WARNING
+    metadata:
+      cwe: "CWE-1336"
