@@ -1,5 +1,4 @@
-import json
-from src.core.ai.protocol import AnalysisRequest, AnalysisResponse, AnalysisData
+from src.core.ai.protocol import AnalysisRequest, AnalysisResponse
 
 
 class TestProtocolSchema:

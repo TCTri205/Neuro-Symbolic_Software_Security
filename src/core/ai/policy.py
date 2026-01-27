@@ -1,6 +1,5 @@
 from typing import List, Optional
 import logging
-from src.core.ai.client import LLMClient
 
 
 class FallbackPolicy:

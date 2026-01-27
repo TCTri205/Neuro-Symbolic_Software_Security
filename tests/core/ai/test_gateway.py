@@ -1,6 +1,4 @@
-import json
-from unittest.mock import MagicMock, patch
-import pytest
+from unittest.mock import patch
 from src.core.ai.gateway import LLMGatewayService
 from src.core.ai.client import MockAIClient
 
