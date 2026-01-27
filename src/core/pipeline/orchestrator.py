@@ -27,6 +27,7 @@ from src.core.taint.engine import (
 from src.core.ai.prompts import SecurityPromptBuilder
 from src.core.scan.semgrep import SemgrepRunner
 from src.core.ai.client import LLMClient
+from src.core.pipeline.gatekeeper import GatekeeperService
 from src.librarian import Librarian
 
 DEFAULT_TAINT_SOURCES = [
@@ -153,6 +154,7 @@ class AnalysisOrchestrator:
         self.taint_engine = TaintEngine()
         self.ranker = RankerService()
         self.router = RoutingService()
+        self.gatekeeper = GatekeeperService()
         self.taint_config = taint_config or TaintConfiguration(
             sources=[TaintSource(name=source) for source in DEFAULT_TAINT_SOURCES],
             sinks=[TaintSink(name=sink) for sink in DEFAULT_TAINT_SINKS],
@@ -170,6 +172,7 @@ class AnalysisOrchestrator:
         self, source_code: str, file_path: str = "<unknown>"
     ) -> AnalysisResult:
         result = AnalysisResult(file_path=file_path)
+        self.gatekeeper.reset_scan()
 
         # Step 1: Secret Scanning (on original code)
         try:
@@ -368,7 +371,8 @@ class AnalysisOrchestrator:
         return None
 
     def _run_llm_analysis(self, cfg, ssa, source: str, file_path: str):
-        client = LLMClient()
+        provider = self.gatekeeper.preferred_provider()
+        client = LLMClient(provider=provider)
         if not client.is_configured:
             return
 
@@ -400,7 +404,15 @@ class AnalysisOrchestrator:
                 block.llm_insights.append(cached_insight)
                 continue
 
+            decision = self.gatekeeper.evaluate(prompt=prompt, client=client)
+            if not decision.allowed:
+                self.logger.info(
+                    f"Skipping LLM analysis for {file_path}: {decision.reason}"
+                )
+                continue
+
             response = client.chat(prompt)
+            self.gatekeeper.record_response(client, response, decision)
             insight = {
                 "provider": client.provider,
                 "model": client.model,
