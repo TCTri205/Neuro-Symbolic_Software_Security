@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional
 
+from src.core.feedback import FeedbackService, FeedbackType
 from src.core.risk.schema import (
     RankerOutput,
     RiskLevel,
@@ -56,10 +57,12 @@ class RankerService:
         source_sensitivity: Optional[Dict[str, float]] = None,
         sink_sensitivity: Optional[Dict[str, float]] = None,
         weights: Optional[Dict[str, float]] = None,
+        feedback_service: Optional[FeedbackService] = None,
     ) -> None:
         self.source_sensitivity = source_sensitivity or DEFAULT_SOURCE_SENSITIVITY
         self.sink_sensitivity = sink_sensitivity or DEFAULT_SINK_SENSITIVITY
         self.weights = self._normalize_weights(weights or DEFAULT_SIGNAL_WEIGHTS)
+        self.feedback_service = feedback_service
 
     def rank(self, flows: List[TaintFlow]) -> RankerOutput:
         items: List[RiskScoreItem] = []
@@ -125,6 +128,45 @@ class RankerService:
             "path_length": path_length,
             "implicit": flow.implicit,
         }
+
+        # Check for feedback overrides
+        if self.feedback_service:
+            feedback = self.feedback_service.get_feedback("TAINT_FLOW", metadata)
+            if feedback:
+                if feedback.feedback_type == FeedbackType.FALSE_POSITIVE:
+                    risk_score = 0.0
+                    risk_level = RiskLevel.SAFE
+                    signals.append(
+                        RiskSignal(
+                            name="feedback_override",
+                            weight=1.0,
+                            score=0.0,
+                            rationale="Marked as False Positive by user.",
+                        )
+                    )
+                elif (
+                    feedback.feedback_type == FeedbackType.ADJUST_RISK
+                    and feedback.adjusted_score is not None
+                ):
+                    risk_score = feedback.adjusted_score
+                    risk_level = self._risk_level(risk_score)
+                    signals.append(
+                        RiskSignal(
+                            name="feedback_adjustment",
+                            weight=1.0,
+                            score=risk_score / 100.0,
+                            rationale=f"Risk adjusted by user to {risk_score}.",
+                        )
+                    )
+
+                # Re-create risk object with updated values
+                risk = RiskScore(
+                    risk_level=risk_level,
+                    risk_score=risk_score,
+                    confidence=confidence,
+                    is_vulnerable=risk_score >= 50.0,
+                    summary=f"{flow.source} -> {flow.sink} (Feedback Applied)",
+                )
 
         return RiskScoreItem(
             check_id="TAINT_FLOW", risk=risk, signals=signals, metadata=metadata
