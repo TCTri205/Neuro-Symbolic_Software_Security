@@ -9,7 +9,9 @@ class SecurityPromptBuilder:
 
     SYSTEM_ROLE = (
         "You are an expert Application Security Engineer specializing in Python security analysis. "
-        "Your goal is to reduce false positives by analyzing static analysis findings within their execution context."
+        "Your goal is to reduce false positives by analyzing static analysis findings within their execution context. "
+        "Do not suggest importing or installing new libraries. "
+        "Return only valid JSON without markdown fences or extra text."
     )
 
     def build_analysis_prompt(
