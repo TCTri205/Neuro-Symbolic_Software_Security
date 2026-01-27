@@ -144,7 +144,10 @@ class TaintEngine:
     ) -> List[TaintFlow]:
         # Map version -> Source Name (simplification: one source per version)
         taint_provenance: Dict[str, str] = {}
+        source_versions: Set[str] = set()
         worklist: List[str] = []
+
+        version_defs = self._build_version_definitions(cfg, ssa_map)
 
         # 1. Sources
         for block in cfg._blocks.values():
@@ -155,6 +158,7 @@ class TaintEngine:
                     for ver in defined_vars:
                         if ver not in taint_provenance:
                             taint_provenance[ver] = source_name
+                            source_versions.add(ver)
                             worklist.append(ver)
 
         # 2. Propagate
@@ -192,11 +196,80 @@ class TaintEngine:
                         stmt, ssa_map, taint_provenance
                     )
                     for arg_ver, src_name in tainted_args:
-                        results.append(
-                            TaintFlow(source=src_name, sink=sink_name, path=[arg_ver])
+                        paths = self._build_backward_paths(
+                            arg_ver,
+                            taint_provenance,
+                            version_defs,
+                            ssa_map,
+                            source_versions,
                         )
+                        for path in paths:
+                            results.append(
+                                TaintFlow(source=src_name, sink=sink_name, path=path)
+                            )
 
         return results
+
+    def _build_version_definitions(
+        self, cfg: ControlFlowGraph, ssa_map: Dict[ast.AST, str]
+    ) -> Dict[str, Any]:
+        version_defs: Dict[str, Any] = {}
+        for block in cfg._blocks.values():
+            for phi in block.phi_nodes:
+                version_defs[phi.result] = phi
+            for stmt in block.statements:
+                defined_vars = self._get_defined_vars(stmt, ssa_map)
+                for ver in defined_vars:
+                    version_defs[ver] = stmt
+        return version_defs
+
+    def _build_backward_paths(
+        self,
+        start_ver: str,
+        taint_provenance: Dict[str, str],
+        version_defs: Dict[str, Any],
+        ssa_map: Dict[ast.AST, str],
+        source_versions: Set[str],
+    ) -> List[List[str]]:
+        paths: List[List[str]] = []
+
+        def dfs(ver: str, path: List[str], visiting: Set[str]):
+            if ver in visiting:
+                return
+            if ver not in taint_provenance:
+                return
+
+            visiting.add(ver)
+            path.append(ver)
+
+            if ver in source_versions:
+                paths.append(list(reversed(path)))
+            else:
+                def_node = version_defs.get(ver)
+                if isinstance(def_node, ast.AST):
+                    used_versions = self._get_used_versions(def_node, ssa_map)
+                    tainted_used = [u for u in used_versions if u in taint_provenance]
+                    if tainted_used:
+                        for used in tainted_used:
+                            dfs(used, path, visiting)
+                    else:
+                        paths.append(list(reversed(path)))
+                elif def_node is not None and hasattr(def_node, "operands"):
+                    operands = def_node.operands.values()
+                    tainted_operands = [o for o in operands if o in taint_provenance]
+                    if tainted_operands:
+                        for op in tainted_operands:
+                            dfs(op, path, visiting)
+                    else:
+                        paths.append(list(reversed(path)))
+                else:
+                    paths.append(list(reversed(path)))
+
+            path.pop()
+            visiting.remove(ver)
+
+        dfs(start_ver, [], set())
+        return paths
 
     def _scan_uses(self, stmt: ast.AST, ssa_map: Dict[ast.AST, str], callback):
         """
@@ -207,6 +280,17 @@ class TaintEngine:
                 if node in ssa_map:
                     callback(ssa_map[node], stmt)
             # Handle other nodes if necessary (e.g. attributes)
+
+    def _get_used_versions(
+        self, stmt: ast.AST, ssa_map: Dict[ast.AST, str]
+    ) -> List[str]:
+        used_versions: List[str] = []
+
+        def register_use(ver: str, s: ast.AST):
+            used_versions.append(ver)
+
+        self._scan_uses(stmt, ssa_map, register_use)
+        return used_versions
 
     def _get_defined_vars(
         self, stmt: ast.AST, ssa_map: Dict[ast.AST, str]
