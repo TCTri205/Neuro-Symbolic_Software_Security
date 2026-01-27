@@ -17,6 +17,8 @@ semgrep>=1.50.0
 # AI/LLM
 openai>=1.0.0
 anthropic>=0.3.0
+# Server
+fastapi>=0.110.0
 # For local quantization if needed later
 # ctransformers>=0.2.0 
 
