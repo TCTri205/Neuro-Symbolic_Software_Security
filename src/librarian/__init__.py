@@ -14,6 +14,10 @@ from .manual_models import (
     build_pickle_profile,
     get_stdlib_profile,
 )
+from .ai_fallback import (
+    AIFallbackBuilder,
+    generate_shadow_profile,
+)
 
 __all__ = [
     "Librarian",
@@ -28,4 +32,6 @@ __all__ = [
     "build_subprocess_profile",
     "build_pickle_profile",
     "get_stdlib_profile",
+    "AIFallbackBuilder",
+    "generate_shadow_profile",
 ]
