@@ -6,7 +6,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.concurrency import run_in_threadpool
-from src.core.ai.client import LLMClient, AIClientFactory
+from src.core.ai.client import AIClientFactory
 from src.core.ai.gateway import LLMGatewayService
 from src.core.ai.protocol import (
     AnalysisRequest,

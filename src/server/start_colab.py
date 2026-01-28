@@ -52,7 +52,7 @@ def start():
         print(f"\n✅ Server accessible at: {public_url}")
         print(f"👉 API Endpoint: {public_url}/analyze")
         print(f"👉 Health Check: {public_url}/health")
-        print(f"🔑 Ensure your client uses the configured API Key.\n")
+        print("🔑 Ensure your client uses the configured API Key.\n")
     except Exception as e:
         print(f"⚠️  Could not start Ngrok: {e}")
         print("Server will only be available locally.")
