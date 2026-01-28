@@ -18,8 +18,8 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from src.core.finetuning.few_shot_registry import FewShotRegistry
-from src.core.telemetry import get_logger
+from src.core.finetuning.few_shot_registry import FewShotRegistry  # noqa: E402
+from src.core.telemetry import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -96,7 +96,7 @@ def prepare_data(output_path: Path, limit: int = 5000):
         if count % 100 == 0:
             logger.info(f"   Collected {count} Python examples...")
 
-    logger.info(f"✅ Processing complete.")
+    logger.info("✅ Processing complete.")
     logger.info(f"   Total Examples: {count}")
     logger.info(f"   Skipped/Filtered: {skipped}")
 

@@ -1,6 +1,6 @@
 import os
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from src.core.ai.client import AIClientFactory, MockAIClient, LLMClient
 
@@ -31,7 +31,7 @@ class TestAIClientFactory(unittest.TestCase):
     @patch("src.core.ai.local_client.LocalLLMClient")
     def test_get_local_client(self, MockLocalLLMClient):
         # We mock the class itself so we don't need unsloth installed
-        client = AIClientFactory.get_client("local")
+        _ = AIClientFactory.get_client("local")
         self.assertTrue(MockLocalLLMClient.called)
 
     def test_default_client(self):

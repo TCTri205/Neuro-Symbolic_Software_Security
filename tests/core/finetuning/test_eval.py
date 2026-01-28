@@ -28,7 +28,7 @@ def test_eval_harness_perfect_score(mock_llm):
     ]
 
     # Mock responses (valid JSON, correct answers)
-    mock_llm.generate.side_effect = [
+    mock_llm.analyze.side_effect = [
         json.dumps({"is_vulnerable": True, "analysis": "Bad code"}),
         json.dumps({"is_vulnerable": False, "analysis": "Good code"}),
     ]
@@ -52,7 +52,7 @@ def test_eval_harness_invalid_json(mock_llm):
         )
     ]
 
-    mock_llm.generate.return_value = "Not JSON"
+    mock_llm.analyze.return_value = "Not JSON"
 
     harness = EvaluationHarness(llm_client=mock_llm)
     metrics = harness.evaluate_batch(examples)
@@ -78,7 +78,7 @@ def test_eval_harness_fp_fn(mock_llm):
         ),
     ]
 
-    mock_llm.generate.side_effect = [
+    mock_llm.analyze.side_effect = [
         json.dumps({"is_vulnerable": True}),  # FP
         json.dumps({"is_vulnerable": False}),  # FN
     ]

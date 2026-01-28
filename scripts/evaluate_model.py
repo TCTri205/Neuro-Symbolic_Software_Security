@@ -17,11 +17,11 @@ project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-from src.core.ai.client import AIClientFactory
-from src.core.finetuning.eval import EvaluationHarness, EvaluationMetrics
-from src.core.finetuning.data_factory import TrainingExample
-from src.core.finetuning.few_shot_registry import FewShotRegistry
-from src.core.telemetry import get_logger
+from src.core.ai.client import AIClientFactory  # noqa: E402
+from src.core.finetuning.eval import EvaluationHarness  # noqa: E402
+from src.core.finetuning.data_factory import TrainingExample  # noqa: E402
+from src.core.finetuning.few_shot_registry import FewShotRegistry  # noqa: E402
+from src.core.telemetry import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 

@@ -8,7 +8,7 @@ sys.modules["transformers"] = MagicMock()
 sys.modules["peft"] = MagicMock()
 sys.modules["datasets"] = MagicMock()
 
-from src.core.finetuning.trainer import Finetuner
+from src.core.finetuning.trainer import Finetuner  # noqa: E402
 
 
 @patch("src.core.finetuning.trainer.FastLanguageModel")
