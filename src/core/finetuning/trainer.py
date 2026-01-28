@@ -13,7 +13,10 @@ except ImportError:
     SFTTrainer = None
     TrainingArguments = None
     load_dataset = None
-    is_bfloat16_supported = lambda: False
+
+    def is_bfloat16_supported():
+        return False
+
     logger.warning("Unsloth/TRL not installed. Training will fail if attempted.")
 
 
@@ -86,12 +89,20 @@ class Finetuner:
         tokenizer.save_pretrained(output_dir)
 
     def _formatting_prompts_func(self, examples):
-        instructions = examples["instruction"]
-        inputs = examples["input_data"]
-        outputs = examples["output_data"]
+        # Support both formats: legacy "input_data"/"output_data" and new "input"/"output"
+        instructions = examples.get("instruction", [])
+        inputs = examples.get("input", examples.get("input_data", []))
+        outputs = examples.get("output", examples.get("output_data", []))
+
         texts = []
-        for instruction, input_str, output in zip(instructions, inputs, outputs):
-            # Output might be dict or string. Ensure string.
+        for instruction, input_obj, output in zip(instructions, inputs, outputs):
+            # Convert input to string (may be dict or string)
+            if isinstance(input_obj, dict):
+                input_str = json.dumps(input_obj, indent=2)
+            else:
+                input_str = str(input_obj)
+
+            # Convert output to string (may be dict or string)
             if isinstance(output, dict):
                 output_str = json.dumps(output, indent=2)
             else:
