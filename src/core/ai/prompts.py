@@ -53,8 +53,9 @@ class SecurityPromptBuilder:
             f"1. Trace the data flow for variables involved in the findings.\n"
             f"2. Determine if input validation or sanitization occurs before the sink.\n"
             f"3. Classify each finding as 'True Positive', 'False Positive', or 'Needs Review'.\n"
-            f"4. Provide a concrete code remediation for True Positives.\n"
-            f"5. IMPORTANT: Return ONLY valid JSON. No markdown code blocks around the JSON.\n\n"
+            f"4. If a finding is a True Positive, provide fix_suggestion and secure_code_snippet. Preserve original indentation.\n"
+            f"5. If not vulnerable, set fix_suggestion and secure_code_snippet to null.\n"
+            f"6. IMPORTANT: Return ONLY valid JSON. No markdown code blocks around the JSON.\n\n"
             f"=== OUTPUT FORMAT ===\n"
             f"{{\n"
             f'  "analysis": [\n'
@@ -62,7 +63,13 @@ class SecurityPromptBuilder:
             f'      "check_id": "<id from findings>",\n'
             f'      "verdict": "<classification>",\n'
             f'      "rationale": "<concise explanation>",\n'
-            f'      "remediation": "<code fix or \'N/A\'>"\n'
+            f'      "remediation": "<code fix or \'N/A\'>",\n'
+            f'      "fix_suggestion": "<description or null>",\n'
+            f'      "secure_code_snippet": "<fixed code or null>",\n'
+            f'      "confidence_score": 0.0,\n'
+            f'      "risk_level": "LOW|MEDIUM|HIGH|CRITICAL|SAFE",\n'
+            f'      "reasoning_trace": "<short reasoning>",\n'
+            f'      "analysis_summary": "<concise summary>"\n'
             f"    }}\n"
             f"  ]\n"
             f"}}"

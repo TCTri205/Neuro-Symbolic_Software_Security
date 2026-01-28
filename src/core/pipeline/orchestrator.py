@@ -444,7 +444,24 @@ class AnalysisOrchestrator:
 
                     parsed = json.loads(clean_content)
                     if isinstance(parsed, dict) and "analysis" in parsed:
-                        insight["analysis"] = parsed["analysis"]
+                        analysis = parsed["analysis"]
+                        if isinstance(analysis, list):
+                            for item in analysis:
+                                if not isinstance(item, dict):
+                                    continue
+                                if "fix_suggestion" not in item and item.get(
+                                    "remediation"
+                                ):
+                                    item["fix_suggestion"] = item.get("remediation")
+                                if "remediation" not in item and item.get(
+                                    "fix_suggestion"
+                                ):
+                                    item["remediation"] = item.get("fix_suggestion")
+                                if "secure_code_snippet" not in item:
+                                    secure_code = item.get("secure_code")
+                                    if secure_code:
+                                        item["secure_code_snippet"] = secure_code
+                            insight["analysis"] = analysis
                 except Exception:
                     # Failed to parse, valid JSON might not be returned
                     pass

@@ -72,3 +72,58 @@ def test_sarif_reporter(sample_results, tmp_path):
     loc = results[0]["locations"][0]["physicalLocation"]
     assert loc["artifactLocation"]["uri"] == "/path/to/src/vuln.py"
     assert loc["region"]["startLine"] == 10
+
+
+def test_sarif_reporter_includes_fixes(tmp_path):
+    results = {
+        "/path/to/src/vuln.py": {
+            "structure": {
+                "blocks": [
+                    {
+                        "id": 1,
+                        "scope": "function",
+                        "security_findings": [
+                            {
+                                "check_id": "python.lang.security.audit.exec-detected",
+                                "line": 10,
+                                "column": 5,
+                                "message": "Exec detected",
+                            }
+                        ],
+                        "llm_insights": [
+                            {
+                                "snippet": "exec(user_input)",
+                                "analysis": [
+                                    {
+                                        "check_id": "python.lang.security.audit.exec-detected",
+                                        "verdict": "True Positive",
+                                        "rationale": "Direct execution of user input.",
+                                        "fix_suggestion": "Use a safe wrapper.",
+                                        "secure_code_snippet": "safe_code()",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+    }
+
+    reporter = SarifReporter()
+    output_path = tmp_path / "report.sarif"
+    reporter.generate(results, str(output_path))
+
+    with open(output_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    result = data["runs"][0]["results"][0]
+    fixes = result["fixes"]
+    assert fixes[0]["description"]["text"] == "Use a safe wrapper."
+
+    replacement = fixes[0]["artifactChanges"][0]["replacements"][0]
+    assert replacement["insertedContent"]["text"] == "safe_code()"
+    assert replacement["deletedRegion"]["startLine"] == 10
+    assert replacement["deletedRegion"]["startColumn"] == 5
+    assert replacement["deletedRegion"]["endLine"] == 10
+    assert replacement["deletedRegion"]["endColumn"] == 16
