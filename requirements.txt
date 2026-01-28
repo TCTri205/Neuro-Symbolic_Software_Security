@@ -19,6 +19,8 @@ openai>=1.0.0
 anthropic>=0.3.0
 # Server
 fastapi>=0.110.0
+uvicorn>=0.20.0
+pyngrok>=7.0.0
 # For local quantization if needed later
 # ctransformers>=0.2.0 
 

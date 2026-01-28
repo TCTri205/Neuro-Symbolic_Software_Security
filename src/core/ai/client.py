@@ -17,6 +17,10 @@ class AIClient(ABC):
         """Send a prompt to the AI model and get the response."""
         pass
 
+    def load_model(self):
+        """Optional: Load model resources if required (e.g. local weights)."""
+        pass
+
 
 class MockAIClient(AIClient):
     """Mock client for testing and offline development."""
@@ -468,6 +472,10 @@ class LLMClient(AIClient):
 class AIClientFactory:
     @staticmethod
     def get_client(provider: str = "mock", **kwargs) -> AIClient:
+        if provider == "local":
+            from src.core.ai.local_client import LocalLLMClient
+
+            return LocalLLMClient(**kwargs)
         if provider in ("server", "remote"):
             from src.core.ai.remote import RemoteAIClient
 
