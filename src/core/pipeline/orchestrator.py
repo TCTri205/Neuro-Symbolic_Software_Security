@@ -11,6 +11,7 @@ from src.core.cfg.ssa.transformer import SSATransformer
 from src.core.parser import PythonAstParser
 from src.core.parser.obfuscation import detect_obfuscation, is_binary_extension
 from src.core.scan.secrets import SecretScanner, SecretMatch
+from src.core.scan.baseline import BaselineEngine
 from src.core.privacy.masker import PrivacyMasker
 from src.core.analysis.sanitizers import SanitizerRegistry
 from src.core.telemetry import get_logger, MeasureLatency
@@ -66,6 +67,7 @@ class AnalysisResult:
     ranker_output: Optional[RankerOutput] = None
     routing: Optional[RoutingPlan] = None
     errors: List[str] = field(default_factory=list)
+    baseline_stats: Optional[Dict[str, int]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize results to dictionary format compatible with reports."""
@@ -124,6 +126,8 @@ class AnalysisResult:
             payload["risk"] = self.ranker_output.model_dump()
         if self.routing:
             payload["routing"] = self.routing.model_dump()
+        if self.baseline_stats:
+            payload["baseline"] = self.baseline_stats
         return payload
 
 
@@ -143,6 +147,7 @@ class AnalysisOrchestrator:
         enable_ir: bool = False,
         enable_docstring_stripping: bool = False,
         taint_config: Optional[TaintConfiguration] = None,
+        baseline_mode: bool = False,
     ):
         self.secret_scanner = SecretScanner()
         self.privacy_masker = PrivacyMasker()
@@ -152,6 +157,7 @@ class AnalysisOrchestrator:
         self.logger = get_logger(__name__)
         self.enable_ir = enable_ir
         self.enable_docstring_stripping = enable_docstring_stripping
+        self.baseline_engine = BaselineEngine() if baseline_mode else None
         self.taint_engine = TaintEngine()
         self.ranker = RankerService()
         self.router = RoutingService()
@@ -174,6 +180,7 @@ class AnalysisOrchestrator:
     ) -> AnalysisResult:
         result = AnalysisResult(file_path=file_path)
         self.gatekeeper.reset_scan()
+        source_lines = source_code.splitlines()
 
         # Step 1: Secret Scanning (on original code)
         try:
@@ -245,6 +252,11 @@ class AnalysisOrchestrator:
                 if result.semgrep_results:
                     self._map_semgrep_findings(cfg, result.semgrep_results, file_path)
 
+                if self.baseline_engine:
+                    result.baseline_stats = self._apply_baseline_filter(
+                        cfg, file_path, source_lines
+                    )
+
                 # Phase 2: Build Call Graph from CFG
                 cg_builder.build_from_cfg(cfg)
 
@@ -311,6 +323,11 @@ class AnalysisOrchestrator:
             result.errors.append(msg)
 
         return result
+
+    def baseline_summary(self) -> Optional[Dict[str, int]]:
+        if not self.baseline_engine:
+            return None
+        return self.baseline_engine.summary()
 
     def analyze_file(self, file_path: str) -> AnalysisResult:
         if is_binary_extension(file_path):
@@ -484,6 +501,29 @@ class AnalysisOrchestrator:
             if "raw" in response:
                 insight["raw"] = response["raw"]
             block.llm_insights.append(insight)
+
+    def _apply_baseline_filter(
+        self, cfg, file_path: str, source_lines: List[str]
+    ) -> Dict[str, int]:
+        new_count = 0
+        existing_count = 0
+
+        for block in cfg._blocks.values():
+            if not block.security_findings:
+                continue
+            filtered, stats = self.baseline_engine.filter_findings(
+                block.security_findings, file_path, source_lines
+            )
+            block.security_findings = filtered
+            new_count += stats.get("new", 0)
+            existing_count += stats.get("existing", 0)
+
+        return {
+            "total": new_count + existing_count,
+            "new": new_count,
+            "existing": existing_count,
+            "resolved": 0,
+        }
 
     def _extract_block_source(self, block, source_lines: List[str]) -> str:
         min_line = None

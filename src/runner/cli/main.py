@@ -17,6 +17,25 @@ def cli():
     help="Operation mode.",
 )
 @click.option(
+    "--baseline",
+    "baseline_generate",
+    is_flag=True,
+    default=False,
+    help="Generate baseline file from current findings.",
+)
+@click.option(
+    "--baseline-only",
+    is_flag=True,
+    default=False,
+    help="Suppress existing findings using baseline.",
+)
+@click.option(
+    "--baseline-reset",
+    is_flag=True,
+    default=False,
+    help="Regenerate baseline file (overwrite existing).",
+)
+@click.option(
     "--format",
     "output_format",
     type=click.Choice(["json", "text"], case_sensitive=False),
@@ -46,6 +65,9 @@ def cli():
 def scan(
     target_path,
     mode,
+    baseline_generate,
+    baseline_only,
+    baseline_reset,
     output_format,
     report_types,
     emit_ir,
@@ -63,19 +85,42 @@ def scan(
 
     # Invoking Pipeline
     from src.core.pipeline.orchestrator import AnalysisOrchestrator
+    from src.core.scan.baseline import BaselineEngine
     from src.report import ReportManager
     import os
     import json
 
     click.echo("Running analysis pipeline...")
+    baseline_enabled = baseline_only
+    generate_baseline = (
+        baseline_generate or baseline_reset or mode.lower() == "baseline"
+    )
+    baseline_engine = BaselineEngine() if generate_baseline else None
+
+    if baseline_reset and baseline_engine:
+        if os.path.exists(baseline_engine.storage_path):
+            os.remove(baseline_engine.storage_path)
+
     orchestrator = AnalysisOrchestrator(
-        enable_ir=emit_ir, enable_docstring_stripping=strip_docstrings
+        enable_ir=emit_ir,
+        enable_docstring_stripping=strip_docstrings,
+        baseline_mode=baseline_enabled,
     )
     results = {}
+    baseline_entries = []
 
     if os.path.isfile(target_path):
         res = orchestrator.analyze_file(target_path)
         results[target_path] = res.to_dict()
+        if baseline_engine and res.cfg:
+            with open(target_path, "r", encoding="utf-8") as f:
+                source_lines = f.read().splitlines()
+            findings = []
+            for block in res.cfg._blocks.values():
+                findings.extend(block.security_findings)
+            baseline_entries.extend(
+                baseline_engine.build_entries(findings, target_path, source_lines)
+            )
     elif os.path.isdir(target_path):
         for root, dirs, files in os.walk(target_path):
             for file in files:
@@ -83,6 +128,21 @@ def scan(
                     full_path = os.path.join(root, file)
                     res = orchestrator.analyze_file(full_path)
                     results[full_path] = res.to_dict()
+                    if baseline_engine and res.cfg:
+                        with open(full_path, "r", encoding="utf-8") as f:
+                            source_lines = f.read().splitlines()
+                        findings = []
+                        for block in res.cfg._blocks.values():
+                            findings.extend(block.security_findings)
+                        baseline_entries.extend(
+                            baseline_engine.build_entries(
+                                findings, full_path, source_lines
+                            )
+                        )
+
+    if baseline_engine:
+        baseline_engine.save(baseline_entries)
+        click.echo(f"Baseline saved: {baseline_engine.storage_path}")
 
     # Generate reports
     click.echo(f"Generating reports in {report_dir}...")
@@ -95,6 +155,15 @@ def scan(
         click.echo(f"  - {report_path}")
 
     click.echo("Reports generated.")
+
+    if baseline_enabled:
+        baseline_summary = orchestrator.baseline_summary()
+        if baseline_summary:
+            debug_payload = {"baseline": baseline_summary}
+            debug_path = os.path.join(report_dir, "nsss_debug.json")
+            with open(debug_path, "w", encoding="utf-8") as f:
+                json.dump(debug_payload, f, indent=2)
+            click.echo(f"Debug output: {debug_path}")
 
     if output_format == "json":
         click.echo(json.dumps(results, indent=2))
