@@ -121,6 +121,7 @@ class DataFactory:
             "is_vulnerable": is_vulnerable,
             "confidence_score": 1.0,
             "risk_level": "CRITICAL" if is_vulnerable else "SAFE",
+            "reasoning_trace": f"Initial scan detected {vuln_type} pattern. Verified lack of sanitization in data flow.",
             "analysis_summary": f"Code is {'vulnerable' if is_vulnerable else 'safe'} regarding {vuln_type}.",
             "fix_suggestion": "Apply proper validation and sanitization."
             if is_vulnerable
