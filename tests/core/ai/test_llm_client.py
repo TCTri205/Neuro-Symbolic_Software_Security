@@ -128,14 +128,14 @@ def insecure():
             blocks_with_findings = [b for b in blocks if b["security_findings"]]
             self.assertEqual(len(blocks_with_findings), 1)
 
-            # Check prompt contains "remediation"
+            # Check prompt contains auto-fix guidance
             args, _ = llm_instance.chat.call_args
             messages = args[0]
             user_msg = next(m["content"] for m in messages if m["role"] == "user")
-            self.assertIn(
-                "Provide a concrete code remediation for True Positives", user_msg
-            )
+            self.assertIn("provide fix_suggestion and secure_code_snippet", user_msg)
             self.assertIn('"remediation"', user_msg)
+            self.assertIn('"fix_suggestion"', user_msg)
+            self.assertIn('"secure_code_snippet"', user_msg)
 
             # Check result stored and parsed
             insight = blocks_with_findings[0]["llm_insights"][0]
