@@ -38,6 +38,9 @@ class InferenceEngine:
                 dtype=None,
                 load_in_4bit=True,
             )
+            # Optimize tokenizer
+            self.tokenizer.padding_side = "left"
+
             FastLanguageModel.for_inference(self.model)
             logger.info("Model loaded successfully.")
         except Exception as e:
@@ -53,20 +56,30 @@ class InferenceEngine:
 
         inputs = self.tokenizer([prompt], return_tensors="pt").to("cuda")
 
-        with torch.inference_mode():
-            outputs = self.model.generate(
-                **inputs,
-                max_new_tokens=2048,
-                use_cache=True,
-                temperature=0.1,  # Low temperature for deterministic analysis
-            )
+        try:
+            with torch.inference_mode():
+                outputs = self.model.generate(
+                    **inputs,
+                    max_new_tokens=2048,
+                    use_cache=True,
+                    temperature=0.1,  # Low temperature for deterministic analysis
+                    do_sample=True,  # Enable sampling for temperature to work
+                    top_p=0.95,  # Nucleus sampling
+                )
 
-        decoded = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        response = decoded[0]
+            decoded = self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
+            response = decoded[0]
 
-        # Post-processing: extract the response part if the prompt is included
-        # The prompt ends with "### Response:\n"
-        if "### Response:\n" in response:
-            response = response.split("### Response:\n")[-1]
+            # Post-processing: extract the response part if the prompt is included
+            # The prompt ends with "### Response:\n"
+            if "### Response:\n" in response:
+                response = response.split("### Response:\n")[-1]
 
-        return response.strip()
+            return response.strip()
+
+        finally:
+            # Memory Cleanup
+            del inputs
+            if "outputs" in locals():
+                del outputs
+            torch.cuda.empty_cache()

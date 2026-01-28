@@ -470,12 +470,33 @@ class LLMClient(AIClient):
 
 
 class AIClientFactory:
-    @staticmethod
-    def get_client(provider: str = "mock", **kwargs) -> AIClient:
+    _instances: Dict[str, AIClient] = {}
+
+    @classmethod
+    def get_client(cls, provider: str = "mock", **kwargs) -> AIClient:
+        # For 'local' provider, we force a singleton pattern to avoid reloading 7GB models
         if provider == "local":
+            if "local" in cls._instances:
+                return cls._instances["local"]
+
             from src.core.ai.local_client import LocalLLMClient
 
-            return LocalLLMClient(**kwargs)
+            client = LocalLLMClient(**kwargs)
+            cls._instances["local"] = client
+            return client
+
+        # For other providers, we might also want caching to reuse connection pools,
+        # but let's stick to the critical path (local) first.
+        # Actually, let's cache everything by provider name for this session.
+        if provider in cls._instances:
+            return cls._instances[provider]
+
+        client = cls._create_client(provider, **kwargs)
+        cls._instances[provider] = client
+        return client
+
+    @staticmethod
+    def _create_client(provider: str, **kwargs) -> AIClient:
         if provider in ("server", "remote"):
             from src.core.ai.remote import RemoteAIClient
 

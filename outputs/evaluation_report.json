@@ -1,0 +1,12 @@
+{
+  "timestamp": 1769565279.1058998,
+  "provider": "mock",
+  "model": "outputs/qwen-security-model",
+  "metrics": {
+    "total_samples": 13,
+    "json_validity_rate": 0.0,
+    "accuracy": 0.0,
+    "fpr": 0.0,
+    "fnr": 0.0
+  }
+}

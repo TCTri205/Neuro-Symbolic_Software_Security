@@ -44,12 +44,13 @@ class EvaluationHarness:
             return EvaluationMetrics(0, 0.0, 0.0, 0.0, 0.0)
 
         for example in examples:
-            # 1. Build Prompt (Simple concatenation for now)
-            # In real usage, this might need a specific template
-            prompt = f"{example.instruction}\n\n{example.input_data}"
-
+            # 1. Use client.analyze interface which handles formatting
             try:
-                response = self.client.generate(prompt)
+                # Some clients might return a dict with "content"
+                response = self.client.analyze(example.instruction, example.input_data)
+                if isinstance(response, dict):
+                    # Fallback if client returns full dict instead of string
+                    response = response.get("content", "")
             except Exception as e:
                 logger.error(f"Generation failed: {e}")
                 # Treat as invalid

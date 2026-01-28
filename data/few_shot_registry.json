@@ -1,0 +1,169 @@
+{
+  "version": "1.0",
+  "examples": [
+    {
+      "code": "def get_user(uid):\n    sql = f'SELECT * FROM users WHERE id = {uid}'\n    cursor.execute(sql)",
+      "vuln_type": "SQL Injection",
+      "is_vulnerable": true,
+      "example_type": "fix",
+      "metadata": {
+        "source": "Demo-SQLi-001",
+        "fix_available": true,
+        "fixed_code": "def get_user(uid):\n    sql = 'SELECT * FROM users WHERE id = %s'\n    cursor.execute(sql, (uid,))"
+      },
+      "content_hash": "efed88ff1992a38e5e1d949a91153dcdefbb9a6932a7a1346d0686f0dbf3f37f",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def get_user(uid):\n    sql = 'SELECT * FROM users WHERE id = %s'\n    cursor.execute(sql, (uid,))",
+      "vuln_type": "SQL Injection",
+      "is_vulnerable": false,
+      "example_type": "fix",
+      "metadata": {
+        "source": "Demo-SQLi-001",
+        "is_patch": true,
+        "original_code": "def get_user(uid):\n    sql = f'SELECT * FROM users WHERE id = {uid}'\n    cursor.execute(sql)"
+      },
+      "content_hash": "a42975368d385b418004120a3de9e9429e7bc94893df35cd967ad611609c08a9",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def login(username, password):\n    query = \"SELECT * FROM users WHERE user='\" + username + \"'\"\n    cursor.execute(query)",
+      "vuln_type": "SQL Injection",
+      "is_vulnerable": true,
+      "example_type": "positive",
+      "metadata": {
+        "reasoning": "String concatenation with user input in SQL query enables SQL injection. Attacker can inject malicious SQL.",
+        "source": "Manual Review"
+      },
+      "content_hash": "7ada3202797cc2b29c5af9cf00328b3130658a58a8555c9c4d6daddafcb2ed70",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def render_comment(user_input):\n    return f'<div>{user_input}</div>'",
+      "vuln_type": "XSS",
+      "is_vulnerable": true,
+      "example_type": "positive",
+      "metadata": {
+        "reasoning": "User input is directly embedded in HTML without sanitization. Attacker can inject <script> tags.",
+        "source": "Manual Review"
+      },
+      "content_hash": "971246a661b4a854c81bc36de27847d8b53ec51f0d796d0e37be3291ee9031be",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def render_comment(user_input):\n    import html\n    safe = html.escape(user_input)\n    return f'<div>{safe}</div>'",
+      "vuln_type": "XSS",
+      "is_vulnerable": false,
+      "example_type": "false_positive",
+      "metadata": {
+        "reason": "html.escape properly neutralizes HTML special characters, preventing XSS.",
+        "triaged_by": "Security Analyst",
+        "triage_timestamp": "2026-01-28T18:38:27.428022"
+      },
+      "content_hash": "a60a96c4e41e728f6d28c3860f3baac11672278d87bfa75441f4deddd2f0f2c4",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def process_expr(user_expr):\n    result = eval(user_expr)\n    return result",
+      "vuln_type": "Code Injection",
+      "is_vulnerable": true,
+      "example_type": "fix",
+      "metadata": {
+        "source": "Demo-CodeInj-001",
+        "fix_available": true,
+        "fixed_code": "def process_expr(user_expr):\n    import ast\n    result = ast.literal_eval(user_expr)\n    return result"
+      },
+      "content_hash": "de9ef39f4c5ba65f50c6f7d790e2d2b24324952e8fe756bf5958dd42510bd5bb",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def process_expr(user_expr):\n    import ast\n    result = ast.literal_eval(user_expr)\n    return result",
+      "vuln_type": "Code Injection",
+      "is_vulnerable": false,
+      "example_type": "fix",
+      "metadata": {
+        "source": "Demo-CodeInj-001",
+        "is_patch": true,
+        "original_code": "def process_expr(user_expr):\n    result = eval(user_expr)\n    return result"
+      },
+      "content_hash": "2941c882cd885e71dd9783359d6468fbb25a4ffc1a5a4b58efc94d7b69a9b994",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def read_file(filename):\n    path = '/var/uploads/' + filename\n    with open(path) as f:\n        return f.read()",
+      "vuln_type": "Path Traversal",
+      "is_vulnerable": true,
+      "example_type": "positive",
+      "metadata": {
+        "reasoning": "Direct concatenation of user input with file path allows path traversal attacks (../../etc/passwd).",
+        "source": "Manual Review"
+      },
+      "content_hash": "e6adbf3968bb033d94bea8bda4415f98c2613ff62d7c6d81b939d7ebbd467134",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def read_file(filename):\n    import os\n    safe_name = os.path.basename(filename)\n    path = os.path.join('/var/uploads', safe_name)\n    with open(path) as f:\n        return f.read()",
+      "vuln_type": "Path Traversal",
+      "is_vulnerable": false,
+      "example_type": "false_positive",
+      "metadata": {
+        "reason": "os.path.basename removes directory components, preventing path traversal.",
+        "triaged_by": "Security Analyst",
+        "triage_timestamp": "2026-01-28T18:38:27.428022"
+      },
+      "content_hash": "7cf06d92dfd42acc0cf6dffb8af59a74de12d30a057023b261e96e86f31fa647",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def ping_host(hostname):\n    import os\n    os.system(f'ping -c 4 {hostname}')",
+      "vuln_type": "Command Injection",
+      "is_vulnerable": true,
+      "example_type": "fix",
+      "metadata": {
+        "source": "Demo-CmdInj-001",
+        "fix_available": true,
+        "fixed_code": "def ping_host(hostname):\n    import subprocess\n    subprocess.run(['ping', '-c', '4', hostname], check=True)"
+      },
+      "content_hash": "18522c24a753ad5b4a846a680d633f7ff5bdb33d32919565183e45990dc5342c",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def ping_host(hostname):\n    import subprocess\n    subprocess.run(['ping', '-c', '4', hostname], check=True)",
+      "vuln_type": "Command Injection",
+      "is_vulnerable": false,
+      "example_type": "fix",
+      "metadata": {
+        "source": "Demo-CmdInj-001",
+        "is_patch": true,
+        "original_code": "def ping_host(hostname):\n    import os\n    os.system(f'ping -c 4 {hostname}')"
+      },
+      "content_hash": "fc02b3d3020c070aa6e1c76eb1c5465c7ba9f19a4c6db1fbfd9cd6a641c24728",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def parse_xml(xml_data):\n    import xml.etree.ElementTree as ET\n    tree = ET.fromstring(xml_data)\n    return tree",
+      "vuln_type": "XXE",
+      "is_vulnerable": true,
+      "example_type": "positive",
+      "metadata": {
+        "reasoning": "xml.etree.ElementTree is vulnerable to XXE attacks if DTDs are not disabled.",
+        "source": "Manual Review"
+      },
+      "content_hash": "9f1001e875e6979e54a17703235a42e1d3956ff8512e3f909d0d8c040f6aea0d",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    },
+    {
+      "code": "def load_session(session_data):\n    import pickle\n    session = pickle.loads(session_data)\n    return session",
+      "vuln_type": "Insecure Deserialization",
+      "is_vulnerable": true,
+      "example_type": "positive",
+      "metadata": {
+        "reasoning": "pickle.loads on untrusted data allows arbitrary code execution through malicious pickle payloads.",
+        "source": "Manual Review"
+      },
+      "content_hash": "4ce0255a05ed1d3e2776c1088259ef648b2b2f66a403501cd31512ab1e042792",
+      "timestamp": "2026-01-28T18:38:27.428022"
+    }
+  ]
+}
