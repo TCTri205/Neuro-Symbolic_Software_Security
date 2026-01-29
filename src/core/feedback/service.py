@@ -1,12 +1,18 @@
 import hashlib
 from typing import Any, Dict, Optional
-from src.core.feedback.schema import FeedbackItem, FeedbackRequest
+from src.core.feedback.schema import FeedbackItem, FeedbackRequest, FeedbackType
 from src.core.feedback.store import FeedbackStore
+from src.core.telemetry.metrics import MetricsCollector
 
 
 class FeedbackService:
-    def __init__(self, store: Optional[FeedbackStore] = None):
+    def __init__(
+        self,
+        store: Optional[FeedbackStore] = None,
+        metrics_collector: Optional[MetricsCollector] = None,
+    ):
         self.store = store or FeedbackStore()
+        self.metrics = metrics_collector or MetricsCollector()
 
     def compute_signature(self, check_id: str, metadata: Dict[str, Any]) -> str:
         """
@@ -44,6 +50,14 @@ class FeedbackService:
             adjusted_score=request.adjusted_score,
         )
         self.store.set(item)
+
+        # Track metrics if feedback is classification-related
+        if request.feedback_type in [
+            FeedbackType.TRUE_POSITIVE,
+            FeedbackType.FALSE_POSITIVE,
+        ]:
+            self.metrics.track_feedback(request.feedback_type.value)
+
         return item
 
     def get_feedback(

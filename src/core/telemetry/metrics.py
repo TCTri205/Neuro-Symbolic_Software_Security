@@ -23,6 +23,40 @@ class LatencyRecord:
     timestamp: float
 
 
+@dataclass
+class FeedbackMetric:
+    """Tracks feedback statistics for precision/FPR calculation."""
+
+    true_positives: int = 0
+    false_positives: int = 0
+    true_negatives: int = 0
+    false_negatives: int = 0
+
+    @property
+    def precision(self) -> float:
+        """TP / (TP + FP)"""
+        denominator = self.true_positives + self.false_positives
+        return self.true_positives / denominator if denominator > 0 else 0.0
+
+    @property
+    def recall(self) -> float:
+        """TP / (TP + FN)"""
+        denominator = self.true_positives + self.false_negatives
+        return self.true_positives / denominator if denominator > 0 else 0.0
+
+    @property
+    def fpr(self) -> float:
+        """False Positive Rate: FP / (FP + TN)"""
+        denominator = self.false_positives + self.true_negatives
+        return self.false_positives / denominator if denominator > 0 else 0.0
+
+    @property
+    def f1_score(self) -> float:
+        """2 * (Precision * Recall) / (Precision + Recall)"""
+        p, r = self.precision, self.recall
+        return 2 * (p * r) / (p + r) if (p + r) > 0 else 0.0
+
+
 class MetricsCollector:
     """
     Singleton class to collect telemetry metrics (latency, token usage).
@@ -45,6 +79,7 @@ class MetricsCollector:
             lambda: {"prompt": 0, "completion": 0, "total": 0}
         )
         self.latency_stats: Dict[str, List[float]] = defaultdict(list)
+        self.feedback_metrics = FeedbackMetric()
 
     def track_tokens(self, model: str, prompt_tokens: int, completion_tokens: int):
         """Records token usage for a specific model."""
@@ -71,6 +106,39 @@ class MetricsCollector:
             },
         )
 
+    def track_feedback(self, feedback_type: str):
+        """
+        Records feedback classification (TRUE_POSITIVE, FALSE_POSITIVE, etc.).
+
+        Args:
+            feedback_type: One of TRUE_POSITIVE, FALSE_POSITIVE, TRUE_NEGATIVE, FALSE_NEGATIVE
+        """
+        feedback_type = feedback_type.upper()
+
+        if feedback_type == "TRUE_POSITIVE":
+            self.feedback_metrics.true_positives += 1
+        elif feedback_type == "FALSE_POSITIVE":
+            self.feedback_metrics.false_positives += 1
+        elif feedback_type == "TRUE_NEGATIVE":
+            self.feedback_metrics.true_negatives += 1
+        elif feedback_type == "FALSE_NEGATIVE":
+            self.feedback_metrics.false_negatives += 1
+        else:
+            logger.warning(f"Unknown feedback type: {feedback_type}")
+            return
+
+        logger.info(
+            "Feedback recorded",
+            extra={
+                "metric_type": "feedback",
+                "feedback_type": feedback_type,
+                "tp": self.feedback_metrics.true_positives,
+                "fp": self.feedback_metrics.false_positives,
+                "tn": self.feedback_metrics.true_negatives,
+                "fn": self.feedback_metrics.false_negatives,
+            },
+        )
+
     def track_latency(self, operation: str, duration_ms: float):
         """Records latency for an operation."""
         record = LatencyRecord(
@@ -90,7 +158,7 @@ class MetricsCollector:
 
     def get_summary(self) -> Dict[str, Any]:
         """Returns a summary of collected metrics."""
-        summary = {"tokens": dict(self.token_counts), "latency": {}}
+        summary = {"tokens": dict(self.token_counts), "latency": {}, "feedback": {}}
 
         for op, durations in self.latency_stats.items():
             if durations:
@@ -100,6 +168,19 @@ class MetricsCollector:
                     "max": max(durations),
                     "avg": sum(durations) / len(durations),
                 }
+
+        # Add feedback metrics
+        fm = self.feedback_metrics
+        summary["feedback"] = {
+            "true_positives": fm.true_positives,
+            "false_positives": fm.false_positives,
+            "true_negatives": fm.true_negatives,
+            "false_negatives": fm.false_negatives,
+            "precision": round(fm.precision, 4),
+            "recall": round(fm.recall, 4),
+            "f1_score": round(fm.f1_score, 4),
+            "fpr": round(fm.fpr, 4),
+        }
 
         return summary
 

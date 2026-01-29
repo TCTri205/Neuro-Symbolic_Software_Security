@@ -2,7 +2,7 @@ import pytest
 import time
 import json
 import os
-from src.core.telemetry.metrics import MetricsCollector, MeasureLatency
+from src.core.telemetry.metrics import MetricsCollector, MeasureLatency, FeedbackMetric
 
 
 @pytest.fixture
@@ -60,3 +60,69 @@ def test_dump_to_file(metrics_collector, tmp_path):
     with open(output_file) as f:
         data = json.load(f)
         assert data["tokens"]["model"]["total"] == 20
+
+
+def test_feedback_metric_precision():
+    fm = FeedbackMetric(
+        true_positives=8, false_positives=2, true_negatives=5, false_negatives=1
+    )
+    assert fm.precision == 0.8  # 8 / (8 + 2)
+    assert fm.recall == 8 / 9  # 8 / (8 + 1)
+    assert fm.fpr == 2 / 7  # 2 / (2 + 5)
+    assert abs(fm.f1_score - 0.8421) < 0.001  # 2 * (0.8 * 0.889) / (0.8 + 0.889)
+
+
+def test_feedback_metric_edge_cases():
+    # All zeros
+    fm = FeedbackMetric()
+    assert fm.precision == 0.0
+    assert fm.recall == 0.0
+    assert fm.fpr == 0.0
+    assert fm.f1_score == 0.0
+
+
+def test_track_feedback(metrics_collector):
+    metrics_collector.track_feedback("TRUE_POSITIVE")
+    metrics_collector.track_feedback("TRUE_POSITIVE")
+    metrics_collector.track_feedback("FALSE_POSITIVE")
+    metrics_collector.track_feedback("TRUE_NEGATIVE")
+
+    summary = metrics_collector.get_summary()
+    fb = summary["feedback"]
+
+    assert fb["true_positives"] == 2
+    assert fb["false_positives"] == 1
+    assert fb["true_negatives"] == 1
+    assert fb["precision"] == round(2 / 3, 4)
+    assert fb["fpr"] == round(1 / 2, 4)
+
+
+def test_track_feedback_unknown_type(metrics_collector):
+    """Unknown feedback types should be logged as warning but not crash."""
+    metrics_collector.track_feedback("UNKNOWN_TYPE")
+    summary = metrics_collector.get_summary()
+    fb = summary["feedback"]
+
+    # All should remain 0
+    assert fb["true_positives"] == 0
+    assert fb["false_positives"] == 0
+
+
+def test_get_summary_with_all_metrics(metrics_collector):
+    """Integration test: summary includes tokens, latency, and feedback."""
+    metrics_collector.track_tokens("gpt-4", 100, 50)
+    metrics_collector.track_latency("scan", 123.45)
+    metrics_collector.track_feedback("TRUE_POSITIVE")
+    metrics_collector.track_feedback("FALSE_POSITIVE")
+
+    summary = metrics_collector.get_summary()
+
+    assert "tokens" in summary
+    assert "latency" in summary
+    assert "feedback" in summary
+
+    assert summary["tokens"]["gpt-4"]["total"] == 150
+    assert summary["latency"]["scan"]["count"] == 1
+    assert summary["feedback"]["true_positives"] == 1
+    assert summary["feedback"]["false_positives"] == 1
+    assert summary["feedback"]["precision"] == 0.5
