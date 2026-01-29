@@ -474,4 +474,90 @@ Nếu các lệnh CLI không hoạt động:
     ```
 
 ---
-**Maintenance:** Hệ thống cần được cập nhật Librarian Profiles định kỳ để nhận diện các thư viện mới.
+
+## 5. Final Rollout (Go-Live Checklist)
+
+Mục tiêu: triển khai đầy đủ hệ thống, xác minh tích hợp end-to-end, và đảm bảo có kế hoạch rollback rõ ràng.
+
+### 5.1. Pre-rollout (T-24h đến T-1h)
+
+1.  **Đóng băng thay đổi** (code freeze) và xác nhận commit/tag release.
+2.  **Quality gates:**
+    ```bash
+    make lint
+    make test
+    make scan-fast
+    ```
+3.  **Backup bắt buộc trước Go-Live:**
+    ```bash
+    nsss ops backup --target all --keep 20
+    ```
+4.  **Health check:**
+    ```bash
+    nsss ops health
+    ```
+5.  **Xác nhận monitoring thresholds** phù hợp môi trường (Dev/CI/Prod).
+
+### 5.2. Go-Live Procedure
+
+1.  **Cập nhật dependencies:**
+    ```bash
+    make install
+    ```
+2.  **Triển khai pipeline:** đảm bảo các module Stage 1/2/3 và LLM gateway hoạt động.
+3.  **Chạy smoke scan** với project nhỏ:
+    ```bash
+    nsss scan /path/to/project
+    ```
+
+### 5.3. Post-rollout Verification (T+1h)
+
+1.  **Kiểm tra alerts:** không có CRITICAL trong monitoring log.
+2.  **So sánh output scan** với baseline (không tăng đột biến false positives).
+3.  **Đảm bảo latency** và token usage nằm trong ngưỡng Warning.
+
+### 5.4. Rollback Criteria
+
+Rollback ngay nếu xảy ra một trong các điều kiện sau:
+- Lỗi hệ thống khiến scan thất bại liên tục.
+- CRITICAL alerts kéo dài > 15 phút.
+- Chất lượng giảm mạnh (precision/recall vượt ngưỡng Critical).
+
+Thực hiện rollback:
+```bash
+nsss ops rollback --target all --yes
+nsss ops health
+```
+
+---
+## 6. Librarian Update Cadence
+
+Mục tiêu: giữ cho Librarian Profiles luôn cập nhật theo phiên bản thư viện và hành vi bảo mật mới nhất.
+
+### 6.1. Chu kỳ cập nhật
+
+- **Weekly:** rà soát các thư viện mới xuất hiện trong scan tuần qua.
+- **Monthly:** cập nhật batch cho các thư viện phổ biến và dependency cốt lõi.
+- **Release-based:** bắt buộc cập nhật trước mỗi lần phát hành NSSS.
+- **Event-driven:** cập nhật ngay khi có CVE nghiêm trọng hoặc false positive tăng đột biến.
+
+### 6.2. Quy trình cập nhật tiêu chuẩn
+
+1.  **Thu thập danh sách thư viện mới** từ log/scan report.
+2.  **Tạo/điều chỉnh profile** theo schema chuẩn:
+    - Tham chiếu `docs/09_Librarian_Schema.md`.
+    - Validate bằng Pydantic `Library` model trước khi lưu.
+3.  **Kiểm thử nhanh:** chạy scan trên project mẫu có sử dụng thư viện mới.
+4.  **Ghi lại thay đổi:** bổ sung changelog ngắn trong release notes nội bộ.
+5.  **Backup trước cập nhật lớn:**
+    ```bash
+    nsss ops backup --target all --keep 20
+    ```
+
+### 6.3. Tiêu chí bắt buộc cập nhật
+
+- Thư viện không có trong Local DB (trigger từ AI fallback).
+- Phát hiện pattern nguy hiểm mới (sink/source thay đổi).
+- Model drift làm giảm precision/recall với thư viện phổ biến.
+
+---
