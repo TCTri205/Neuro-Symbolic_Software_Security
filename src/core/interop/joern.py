@@ -14,8 +14,10 @@ References:
 - docs/07_IR_Schema.md
 """
 
+import json
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from pathlib import Path
+from typing import Any, Dict
 from src.core.telemetry import get_logger
 
 logger = get_logger(__name__)
@@ -129,3 +131,25 @@ class JoernStub(ExternalParser):
         )
 
         return {"nodes": [], "edges": [], "metadata": {"parser": "joern-stub"}}
+
+
+def export_stub_ir(file_path: str, output_path: str) -> Dict[str, Any]:
+    """
+    Run the Joern stub and export IR to disk.
+
+    Args:
+        file_path: Source file path to pass to JoernStub
+        output_path: JSON file path for exported IR
+
+    Returns:
+        The NSSS IR dictionary written to disk
+    """
+    stub = JoernStub()
+    ir = stub.parse_file(file_path)
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(ir, indent=2), encoding="utf-8")
+
+    logger.info("Exported Joern stub IR to %s", output_path)
+    return ir

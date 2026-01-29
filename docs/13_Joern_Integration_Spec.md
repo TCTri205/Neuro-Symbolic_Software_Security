@@ -75,3 +75,13 @@ Task `nsss-bce.7.8` chỉ yêu cầu implement lớp `JoernStub` và unit test �
 3.  Log cảnh báo khi được gọi.
 
 Không yêu cầu cài đặt Joern thật sự trong giai đoạn này.
+
+## 6. Stub Pipeline Demo
+
+Chạy pipeline stub với sample project:
+
+```bash
+python scripts/run_joern_stub.py
+```
+
+Mặc định script đọc file `samples/joern_stub/hello.c` và ghi output ra `joern_stub_ir.json`.
