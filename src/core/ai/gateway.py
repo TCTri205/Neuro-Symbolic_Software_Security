@@ -1,7 +1,8 @@
-from typing import Dict, Optional
+from typing import Optional
 import logging
 from src.core.ai.client import AIClient
 from src.core.ai.cache import CacheKeyGenerator
+from src.core.ai.cache_store import LLMCacheStore
 from src.core.ai.circuit_breaker import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -21,11 +22,13 @@ class LLMGatewayService:
     """
 
     def __init__(
-        self, client: AIClient, circuit_breaker: Optional[CircuitBreaker] = None
+        self,
+        client: AIClient,
+        circuit_breaker: Optional[CircuitBreaker] = None,
+        cache_store: Optional[LLMCacheStore] = None,
     ):
         self.client = client
-        # Simple in-memory cache for now. Ideally should be disk-based or Redis.
-        self.cache: Dict[str, str] = {}
+        self.cache_store = cache_store or LLMCacheStore.get_instance()
         self.circuit_breaker = circuit_breaker or self._resolve_circuit_breaker()
 
     def analyze(self, system_prompt: str, user_prompt: str) -> str:
@@ -36,15 +39,18 @@ class LLMGatewayService:
         payload = {
             "system_prompt": system_prompt,
             "user_prompt": user_prompt,
+            "provider": getattr(self.client, "provider", None),
+            "model": getattr(self.client, "model", None),
             # We enforce temperature=0 implicitly by caching on inputs.
             # If the client configuration changes (e.g. model), the key should probably include model info.
             # For now, simplistic input hashing.
         }
         cache_key = CacheKeyGenerator.generate(payload)
 
-        if cache_key in self.cache:
+        cached = self.cache_store.get(cache_key)
+        if cached is not None:
             logging.info(f"LLMGateway: Cache hit for key {cache_key[:8]}")
-            return self.cache[cache_key]
+            return cached
 
         logging.info(f"LLMGateway: Cache miss for key {cache_key[:8]}")
         if not self.circuit_breaker.allow_request():
@@ -58,7 +64,7 @@ class LLMGatewayService:
         else:
             self.circuit_breaker.record_success()
 
-        self.cache[cache_key] = response
+        self.cache_store.set(cache_key, response)
         return response
 
     def _resolve_circuit_breaker(self) -> CircuitBreaker:

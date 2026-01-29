@@ -56,6 +56,9 @@ class Settings(BaseSettings):
     GRAPH_STORAGE_PATH: str = Field(
         "./.graph_data", description="Path to store graph data"
     )
+    LLM_CACHE_PATH: str = Field(
+        ".nsss/cache/llm_cache.json", description="Path to store LLM cache"
+    )
 
     # AI Server
     AI_SERVER_URL: str = Field(
