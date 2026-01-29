@@ -20,6 +20,13 @@ class TaintConfiguration(BaseModel):
     sanitizers: List[str] = Field(default_factory=list)
 
 
+class TaintSpan(BaseModel):
+    start_line: int
+    start_col: int
+    end_line: int
+    end_col: int
+
+
 class TaintFlow(BaseModel):
     source: str
     sink: str
@@ -27,6 +34,7 @@ class TaintFlow(BaseModel):
         default_factory=list
     )  # List of SSA versions or statement IDs
     implicit: bool = False
+    sink_span: Optional[TaintSpan] = None
 
 
 class TaintResult(BaseModel):
@@ -241,6 +249,7 @@ class TaintEngine:
                                     implicit=any(
                                         ver in implicit_versions for ver in path
                                     ),
+                                    sink_span=self._span_from_node(stmt),
                                 )
                             )
 
@@ -528,3 +537,24 @@ class TaintEngine:
 
         self._scan_uses(stmt, ssa_map, check)
         return tainted_args
+
+    def _span_from_node(self, node: ast.AST) -> Optional[TaintSpan]:
+        start_line = getattr(node, "lineno", -1)
+        start_col = getattr(node, "col_offset", -1)
+        end_line = getattr(node, "end_lineno", None)
+        end_col = getattr(node, "end_col_offset", None)
+
+        if not isinstance(start_line, int) or not isinstance(start_col, int):
+            return None
+
+        if not isinstance(end_line, int):
+            end_line = start_line
+        if not isinstance(end_col, int):
+            end_col = start_col + 1
+
+        return TaintSpan(
+            start_line=start_line,
+            start_col=start_col,
+            end_line=end_line,
+            end_col=end_col,
+        )

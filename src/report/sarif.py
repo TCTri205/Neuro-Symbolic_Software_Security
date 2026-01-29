@@ -98,6 +98,10 @@ class SarifReporter(BaseReporter):
                         "verdict": verdict,
                         "remediation": remediation,
                     }
+                    if metadata:
+                        graph_report_name = metadata.get("graph_report_name")
+                        if graph_report_name:
+                            properties["graph_trace"] = graph_report_name
                     if confidence is not None:
                         properties["confidence"] = confidence
                     if rationale:

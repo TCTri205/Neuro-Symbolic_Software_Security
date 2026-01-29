@@ -5,6 +5,7 @@ from .base import BaseReporter
 from .markdown import MarkdownReporter
 from .sarif import SarifReporter
 from .ir import IRReporter
+from .graph import GraphTraceExporter
 
 logger = logging.getLogger(__name__)
 
@@ -17,9 +18,26 @@ class ReportManager:
     def __init__(self, output_dir: str, report_types: Optional[List[str]] = None):
         self.output_dir = output_dir
         self._reporter_registry = {
-            "markdown": (MarkdownReporter, ".md"),
-            "sarif": (SarifReporter, ".sarif"),
-            "ir": (IRReporter, ".ir.json"),
+            "markdown": {
+                "cls": MarkdownReporter,
+                "extension": ".md",
+                "base_name": "nsss_report",
+            },
+            "sarif": {
+                "cls": SarifReporter,
+                "extension": ".sarif",
+                "base_name": "nsss_report",
+            },
+            "ir": {
+                "cls": IRReporter,
+                "extension": ".ir.json",
+                "base_name": "nsss_report",
+            },
+            "graph": {
+                "cls": GraphTraceExporter,
+                "extension": ".json",
+                "base_name": "nsss_graph",
+            },
         }
         self.reporters: List[BaseReporter] = self._build_reporters(report_types)
 
@@ -35,15 +53,23 @@ class ReportManager:
             if not registry_entry:
                 logger.warning(f"Unknown report type requested: {report_type}")
                 continue
-            reporter_cls, _ = registry_entry
+            reporter_cls = registry_entry["cls"]
             reporters.append(reporter_cls())
 
         return reporters
 
     def _report_extension(self, reporter: BaseReporter) -> Optional[str]:
-        for reporter_cls, extension in self._reporter_registry.values():
+        for registry_entry in self._reporter_registry.values():
+            reporter_cls = registry_entry["cls"]
             if isinstance(reporter, reporter_cls):
-                return extension
+                return registry_entry["extension"]
+        return None
+
+    def _report_base_name(self, reporter: BaseReporter) -> Optional[str]:
+        for registry_entry in self._reporter_registry.values():
+            reporter_cls = registry_entry["cls"]
+            if isinstance(reporter, reporter_cls):
+                return registry_entry["base_name"]
         return None
 
     def generate_all(
@@ -69,17 +95,26 @@ class ReportManager:
                 return []
 
         generated_files = []
+        local_metadata = dict(metadata or {})
+
+        graph_report_name = None
+        for reporter in self.reporters:
+            if isinstance(reporter, GraphTraceExporter):
+                graph_report_name = "nsss_graph.json"
+                break
+        if graph_report_name:
+            local_metadata["graph_report_name"] = graph_report_name
 
         for reporter in self.reporters:
             try:
-                filename = "nsss_report"
+                base_name = self._report_base_name(reporter) or "nsss_report"
                 extension = self._report_extension(reporter)
                 if not extension:
                     continue
-                filename += extension
+                filename = f"{base_name}{extension}"
 
                 output_path = os.path.join(self.output_dir, filename)
-                reporter.generate(results, output_path, metadata=metadata)
+                reporter.generate(results, output_path, metadata=local_metadata)
                 generated_files.append(output_path)
                 logger.info(f"Generated report: {output_path}")
 

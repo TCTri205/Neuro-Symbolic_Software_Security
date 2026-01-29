@@ -122,6 +122,8 @@ class AnalysisResult:
             payload["ir"] = self.ir
         if self.taint_flows:
             payload["taint_flows"] = [flow.model_dump() for flow in self.taint_flows]
+            if self.ssa:
+                payload["taint_trace_meta"] = self._build_taint_trace_meta()
         if self.ranker_output:
             payload["risk"] = self.ranker_output.model_dump()
         if self.routing:
@@ -129,6 +131,59 @@ class AnalysisResult:
         if self.baseline_stats:
             payload["baseline"] = self.baseline_stats
         return payload
+
+    @staticmethod
+    def _node_span(node: ast.AST) -> Dict[str, int]:
+        start_line = getattr(node, "lineno", -1)
+        start_col = getattr(node, "col_offset", -1)
+        end_line = getattr(node, "end_lineno", None)
+        end_col = getattr(node, "end_col_offset", None)
+
+        if not isinstance(end_line, int):
+            end_line = start_line if isinstance(start_line, int) else -1
+        if not isinstance(end_col, int):
+            if isinstance(start_col, int) and start_col >= 0:
+                end_col = start_col + 1
+            else:
+                end_col = -1
+
+        return {
+            "start_line": start_line if isinstance(start_line, int) else -1,
+            "start_col": start_col if isinstance(start_col, int) else -1,
+            "end_line": end_line,
+            "end_col": end_col,
+        }
+
+    def _build_taint_trace_meta(self) -> Dict[str, Any]:
+        version_spans: Dict[str, Dict[str, int]] = {}
+        if not self.ssa:
+            return {"versions": version_spans}
+
+        for version, def_info in self.ssa.version_defs.items():
+            def_node = None
+            stmt = None
+            if isinstance(def_info, tuple) and len(def_info) == 2:
+                def_node, stmt = def_info
+            else:
+                def_node = def_info
+
+            target = None
+            if isinstance(stmt, ast.AST):
+                target = stmt
+            elif isinstance(def_node, ast.AST):
+                target = def_node
+
+            if target is None:
+                version_spans[version] = {
+                    "start_line": -1,
+                    "start_col": -1,
+                    "end_line": -1,
+                    "end_col": -1,
+                }
+            else:
+                version_spans[version] = self._node_span(target)
+
+        return {"versions": version_spans}
 
 
 class AnalysisOrchestrator:

@@ -46,7 +46,7 @@ def cli():
     "--report-type",
     "report_types",
     multiple=True,
-    type=click.Choice(["markdown", "sarif", "ir"], case_sensitive=False),
+    type=click.Choice(["markdown", "sarif", "ir", "graph"], case_sensitive=False),
     help="Report types to generate (repeatable).",
 )
 @click.option(
@@ -87,6 +87,7 @@ def scan(
     from src.core.pipeline.orchestrator import AnalysisOrchestrator
     from src.core.scan.baseline import BaselineEngine
     from src.report import ReportManager
+    from src.report.graph import GraphTraceExporter
     import os
     import json
 
@@ -172,24 +173,29 @@ def scan(
 
     # Prepare metadata for reports
     metadata = {}
+    debug_payload = {}
     if baseline_enabled:
         baseline_summary = orchestrator.baseline_summary()
         if baseline_summary:
             metadata["baseline"] = baseline_summary
-            # Also save debug file
-            debug_path = os.path.join(report_dir, "nsss_debug.json")
-            # Create report dir if not exists (ReportManager does this too but we need it now)
-            if not os.path.exists(report_dir):
-                os.makedirs(report_dir)
+            debug_payload["baseline"] = baseline_summary
 
-            with open(debug_path, "w", encoding="utf-8") as f:
-                json.dump({"baseline": baseline_summary}, f, indent=2)
-            click.echo(f"Debug output: {debug_path}")
+    report_types_list = [report_type.lower() for report_type in report_types]
+    include_graph = not report_types_list or "graph" in report_types_list
+    if include_graph:
+        debug_payload["graph"] = GraphTraceExporter.build_payload(results)
+
+    if debug_payload:
+        debug_path = os.path.join(report_dir, "nsss_debug.json")
+        if not os.path.exists(report_dir):
+            os.makedirs(report_dir)
+        with open(debug_path, "w", encoding="utf-8") as f:
+            json.dump(debug_payload, f, indent=2)
+        click.echo(f"Debug output: {debug_path}")
 
     # Generate reports
     click.echo(f"Generating reports in {report_dir}...")
 
-    report_types_list = [report_type.lower() for report_type in report_types]
     report_manager = ReportManager(report_dir, report_types=report_types_list or None)
     generated_reports = report_manager.generate_all(results, metadata=metadata)
 
