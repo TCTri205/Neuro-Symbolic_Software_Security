@@ -12,9 +12,12 @@ class DebugReporter(BaseReporter):
         metadata: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Generate a debug JSON artifact with raw pipeline outputs."""
+        metadata_payload = metadata or {}
         payload = {
-            "metadata": metadata or {},
+            "metadata": metadata_payload,
             "results": results,
         }
+        if "baseline" in metadata_payload:
+            payload["baseline"] = metadata_payload["baseline"]
         with open(output_path, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)

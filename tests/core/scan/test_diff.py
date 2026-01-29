@@ -88,7 +88,7 @@ def test_impact_computation(diff_scanner, tmp_path):
     graph.add_node(utils_node)
 
     # Mock persistence loading
-    diff_scanner.persistence.load_ir_graph = MagicMock(return_value=(graph, {}))
+    diff_scanner.persistence.load_project_graph = MagicMock(return_value=(graph, {}))
 
     # Change in src/core.py
     changed_core = str(tmp_path / "src/core.py")
