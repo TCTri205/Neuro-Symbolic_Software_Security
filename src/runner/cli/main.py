@@ -67,6 +67,12 @@ def cli():
     default=False,
     help="Strip docstrings from IR.",
 )
+@click.option(
+    "--diff",
+    is_flag=True,
+    default=False,
+    help="Run incrementally on changed files and dependencies only.",
+)
 @click.option("--report-dir", default=".", help="Directory to save reports.")
 def scan(
     target_path,
@@ -78,6 +84,7 @@ def scan(
     report_types,
     emit_ir,
     strip_docstrings,
+    diff,
     report_dir,
 ):
     """
@@ -92,10 +99,26 @@ def scan(
     # Invoking Pipeline
     from src.core.pipeline.orchestrator import AnalysisOrchestrator
     from src.core.scan.baseline import BaselineEngine
+    from src.core.scan.diff import DiffScanner
     from src.report import ReportManager
     from src.report.graph import GraphTraceExporter
     import os
     import json
+
+    impacted_files = None
+    if diff:
+        click.echo("Running in Diff Mode...")
+        # Assume project root is current working directory for now
+        project_root = os.getcwd()
+        diff_scanner = DiffScanner(project_root=project_root)
+        changed = diff_scanner.get_changed_files()
+        impacted_files = diff_scanner.compute_impacted_files(changed)
+        click.echo(
+            f"Diff Analysis: {len(changed)} changed, {len(impacted_files)} impacted."
+        )
+        if not impacted_files:
+            click.echo("No files impacted. Exiting.")
+            return
 
     click.echo("Running analysis pipeline...")
     baseline_enabled = baseline_only
@@ -117,35 +140,44 @@ def scan(
     baseline_entries = []
 
     if os.path.isfile(target_path):
-        res = orchestrator.analyze_file(target_path)
-        results[target_path] = res.to_dict()
-        if baseline_engine and res.cfg:
-            with open(target_path, "r", encoding="utf-8") as f:
-                source_lines = f.read().splitlines()
-            findings = []
-            for block in res.cfg._blocks.values():
-                findings.extend(block.security_findings)
+        abs_target = os.path.abspath(target_path)
+        if impacted_files is not None and abs_target not in impacted_files:
+            click.echo(f"Skipping {target_path} (not in impacted set)")
+        else:
+            res = orchestrator.analyze_file(target_path)
+            results[target_path] = res.to_dict()
+            if baseline_engine and res.cfg:
+                with open(target_path, "r", encoding="utf-8") as f:
+                    source_lines = f.read().splitlines()
+                findings = []
+                for block in res.cfg._blocks.values():
+                    findings.extend(block.security_findings)
 
-            if res.secrets:
-                for s in res.secrets:
-                    findings.append(
-                        {
-                            "check_id": f"secret.{s.type.replace(' ', '_').lower()}",
-                            "message": f"Found {s.type}",
-                            "line": s.line,
-                            "column": 1,
-                            "severity": "CRITICAL",
-                        }
-                    )
+                if res.secrets:
+                    for s in res.secrets:
+                        findings.append(
+                            {
+                                "check_id": f"secret.{s.type.replace(' ', '_').lower()}",
+                                "message": f"Found {s.type}",
+                                "line": s.line,
+                                "column": 1,
+                                "severity": "CRITICAL",
+                            }
+                        )
 
-            baseline_entries.extend(
-                baseline_engine.build_entries(findings, target_path, source_lines)
-            )
+                baseline_entries.extend(
+                    baseline_engine.build_entries(findings, target_path, source_lines)
+                )
     elif os.path.isdir(target_path):
         for root, dirs, files in os.walk(target_path):
             for file in files:
                 if file.endswith(".py"):
                     full_path = os.path.join(root, file)
+                    abs_path = os.path.abspath(full_path)
+
+                    if impacted_files is not None and abs_path not in impacted_files:
+                        continue
+
                     res = orchestrator.analyze_file(full_path)
                     results[full_path] = res.to_dict()
                     if baseline_engine and res.cfg:
