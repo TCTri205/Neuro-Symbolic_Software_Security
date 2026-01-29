@@ -1,13 +1,27 @@
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from .base import BaseReporter
 
 
 class MarkdownReporter(BaseReporter):
-    def generate(self, results: Dict[str, Any], output_path: str) -> None:
+    def generate(
+        self,
+        results: Dict[str, Any],
+        output_path: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
         Generates a Markdown report from the pipeline results.
         """
         content = ["# Neuro-Symbolic Security Scan Report\n"]
+
+        # Add Baseline Summary if available
+        if metadata and "baseline" in metadata:
+            stats = metadata["baseline"]
+            content.append("## Baseline Summary")
+            content.append(f"*   **Total Findings**: {stats.get('total', 0)}")
+            content.append(f"*   **New Findings**: {stats.get('new', 0)}")
+            content.append(f"*   **Existing (Suppressed)**: {stats.get('existing', 0)}")
+            content.append(f"*   **Resolved**: {stats.get('resolved', 0)}\n")
 
         has_findings = False
 

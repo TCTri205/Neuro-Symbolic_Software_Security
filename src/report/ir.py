@@ -1,11 +1,16 @@
 import json
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from .base import BaseReporter
 
 
 class IRReporter(BaseReporter):
-    def generate(self, results: Dict[str, Any], output_path: str) -> None:
+    def generate(
+        self,
+        results: Dict[str, Any],
+        output_path: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
         Generates a JSON file containing parsed IR per file.
         """

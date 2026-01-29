@@ -46,12 +46,15 @@ class ReportManager:
                 return extension
         return None
 
-    def generate_all(self, results: Dict[str, Any]) -> List[str]:
+    def generate_all(
+        self, results: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None
+    ) -> List[str]:
         """
         Generates all configured reports.
 
         Args:
             results: Dictionary mapping file paths to analysis result dicts.
+            metadata: Optional global metadata (e.g., baseline stats).
 
         Returns:
             List of generated file paths.
@@ -76,7 +79,7 @@ class ReportManager:
                 filename += extension
 
                 output_path = os.path.join(self.output_dir, filename)
-                reporter.generate(results, output_path)
+                reporter.generate(results, output_path, metadata=metadata)
                 generated_files.append(output_path)
                 logger.info(f"Generated report: {output_path}")
 

@@ -253,9 +253,11 @@ class AnalysisOrchestrator:
                     self._map_semgrep_findings(cfg, result.semgrep_results, file_path)
 
                 if self.baseline_engine:
-                    result.baseline_stats = self._apply_baseline_filter(
-                        cfg, file_path, source_lines
+                    stats, filtered_secrets = self._apply_baseline_filter(
+                        cfg, file_path, source_lines, result.secrets
                     )
+                    result.baseline_stats = stats
+                    result.secrets = filtered_secrets
 
                 # Phase 2: Build Call Graph from CFG
                 cg_builder.build_from_cfg(cfg)
@@ -503,8 +505,12 @@ class AnalysisOrchestrator:
             block.llm_insights.append(insight)
 
     def _apply_baseline_filter(
-        self, cfg, file_path: str, source_lines: List[str]
-    ) -> Dict[str, int]:
+        self,
+        cfg,
+        file_path: str,
+        source_lines: List[str],
+        secrets: Optional[List[SecretMatch]] = None,
+    ) -> Any:  # Returns Tuple[Dict[str, int], List[SecretMatch]]
         new_count = 0
         existing_count = 0
 
@@ -518,12 +524,44 @@ class AnalysisOrchestrator:
             new_count += stats.get("new", 0)
             existing_count += stats.get("existing", 0)
 
-        return {
+        filtered_secrets = []
+        if secrets:
+            secret_findings = []
+            for s in secrets:
+                # Create a finding dict that BaselineEngine can understand
+                secret_findings.append(
+                    {
+                        "check_id": f"secret.{s.type.replace(' ', '_').lower()}",
+                        "message": f"Found {s.type}",
+                        "line": s.line,
+                        "column": 1,
+                        "severity": "CRITICAL",
+                        "_original_secret": s,
+                    }
+                )
+
+            filtered_dicts, stats = self.baseline_engine.filter_findings(
+                secret_findings, file_path, source_lines
+            )
+
+            # Reconstruct list of SecretMatch objects
+            for d in filtered_dicts:
+                if "_original_secret" in d:
+                    filtered_secrets.append(d["_original_secret"])
+
+            new_count += stats.get("new", 0)
+            existing_count += stats.get("existing", 0)
+        elif secrets is not None:
+            # If secrets passed as empty list, keep it empty
+            filtered_secrets = []
+
+        stats = {
             "total": new_count + existing_count,
             "new": new_count,
             "existing": existing_count,
             "resolved": 0,
         }
+        return stats, filtered_secrets
 
     def _extract_block_source(self, block, source_lines: List[str]) -> str:
         min_line = None

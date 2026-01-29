@@ -4,7 +4,12 @@ from .base import BaseReporter
 
 
 class SarifReporter(BaseReporter):
-    def generate(self, results: Dict[str, Any], output_path: str) -> None:
+    def generate(
+        self,
+        results: Dict[str, Any],
+        output_path: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
         """
         Generates a SARIF report from the pipeline results.
         """

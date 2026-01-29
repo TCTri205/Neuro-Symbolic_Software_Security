@@ -118,6 +118,19 @@ def scan(
             findings = []
             for block in res.cfg._blocks.values():
                 findings.extend(block.security_findings)
+
+            if res.secrets:
+                for s in res.secrets:
+                    findings.append(
+                        {
+                            "check_id": f"secret.{s.type.replace(' ', '_').lower()}",
+                            "message": f"Found {s.type}",
+                            "line": s.line,
+                            "column": 1,
+                            "severity": "CRITICAL",
+                        }
+                    )
+
             baseline_entries.extend(
                 baseline_engine.build_entries(findings, target_path, source_lines)
             )
@@ -134,6 +147,19 @@ def scan(
                         findings = []
                         for block in res.cfg._blocks.values():
                             findings.extend(block.security_findings)
+
+                        if res.secrets:
+                            for s in res.secrets:
+                                findings.append(
+                                    {
+                                        "check_id": f"secret.{s.type.replace(' ', '_').lower()}",
+                                        "message": f"Found {s.type}",
+                                        "line": s.line,
+                                        "column": 1,
+                                        "severity": "CRITICAL",
+                                    }
+                                )
+
                         baseline_entries.extend(
                             baseline_engine.build_entries(
                                 findings, full_path, source_lines
@@ -144,26 +170,33 @@ def scan(
         baseline_engine.save(baseline_entries)
         click.echo(f"Baseline saved: {baseline_engine.storage_path}")
 
+    # Prepare metadata for reports
+    metadata = {}
+    if baseline_enabled:
+        baseline_summary = orchestrator.baseline_summary()
+        if baseline_summary:
+            metadata["baseline"] = baseline_summary
+            # Also save debug file
+            debug_path = os.path.join(report_dir, "nsss_debug.json")
+            # Create report dir if not exists (ReportManager does this too but we need it now)
+            if not os.path.exists(report_dir):
+                os.makedirs(report_dir)
+
+            with open(debug_path, "w", encoding="utf-8") as f:
+                json.dump({"baseline": baseline_summary}, f, indent=2)
+            click.echo(f"Debug output: {debug_path}")
+
     # Generate reports
     click.echo(f"Generating reports in {report_dir}...")
 
     report_types_list = [report_type.lower() for report_type in report_types]
     report_manager = ReportManager(report_dir, report_types=report_types_list or None)
-    generated_reports = report_manager.generate_all(results)
+    generated_reports = report_manager.generate_all(results, metadata=metadata)
 
     for report_path in generated_reports:
         click.echo(f"  - {report_path}")
 
     click.echo("Reports generated.")
-
-    if baseline_enabled:
-        baseline_summary = orchestrator.baseline_summary()
-        if baseline_summary:
-            debug_payload = {"baseline": baseline_summary}
-            debug_path = os.path.join(report_dir, "nsss_debug.json")
-            with open(debug_path, "w", encoding="utf-8") as f:
-                json.dump(debug_payload, f, indent=2)
-            click.echo(f"Debug output: {debug_path}")
 
     if output_format == "json":
         click.echo(json.dumps(results, indent=2))
