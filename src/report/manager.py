@@ -2,6 +2,7 @@ import os
 import logging
 from typing import Dict, Any, List, Optional
 from .base import BaseReporter
+from .debug import DebugReporter
 from .markdown import MarkdownReporter
 from .sarif import SarifReporter
 from .ir import IRReporter
@@ -22,6 +23,11 @@ class ReportManager:
                 "cls": MarkdownReporter,
                 "extension": ".md",
                 "base_name": "nsss_report",
+            },
+            "debug": {
+                "cls": DebugReporter,
+                "extension": ".json",
+                "base_name": "nsss_debug",
             },
             "sarif": {
                 "cls": SarifReporter,

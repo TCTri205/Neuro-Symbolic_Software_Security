@@ -50,7 +50,9 @@ def cli():
     "--report-type",
     "report_types",
     multiple=True,
-    type=click.Choice(["markdown", "sarif", "ir", "graph"], case_sensitive=False),
+    type=click.Choice(
+        ["markdown", "sarif", "ir", "graph", "debug"], case_sensitive=False
+    ),
     help="Report types to generate (repeatable).",
 )
 @click.option(
@@ -284,6 +286,79 @@ def clear_cache(llm_cache: bool, graph_cache: bool, project_root: str) -> None:
                 os.rmdir(cache_dir)
         else:
             click.echo(f"Graph cache not found: {graph_cache_path}")
+
+
+@ops.command("graph-export")
+@click.option(
+    "--project-root",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    help="Project root used for graph cache lookup.",
+)
+@click.option(
+    "--output",
+    default="graph_export.jsonl",
+    type=click.Path(dir_okay=False),
+    help="Output path for exported graph cache.",
+)
+def graph_export(project_root: str, output: str) -> None:
+    """Export the persisted IR graph cache to a file."""
+    from src.core.persistence.graph_serializer import (
+        JsonlGraphSerializer,
+        build_cache_path,
+    )
+
+    root = os.path.abspath(project_root)
+    cache_path = build_cache_path(root)
+    if not os.path.exists(cache_path):
+        raise click.ClickException(f"Graph cache not found: {cache_path}")
+
+    serializer = JsonlGraphSerializer()
+    serializer.load(cache_path)
+
+    output_path = os.path.abspath(output)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    shutil.copyfile(cache_path, output_path)
+    click.echo(f"Exported graph cache to: {output_path}")
+
+
+@ops.command("graph-import")
+@click.option(
+    "--project-root",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    help="Project root used for graph cache lookup.",
+)
+@click.option(
+    "--input",
+    "input_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Input graph cache file to import.",
+)
+def graph_import(project_root: str, input_path: str) -> None:
+    """Import a persisted IR graph cache file into this project."""
+    from src.core.persistence.graph_serializer import (
+        JsonlGraphSerializer,
+        build_cache_path,
+    )
+
+    root = os.path.abspath(project_root)
+    cache_path = build_cache_path(root)
+    serializer = JsonlGraphSerializer()
+
+    graph, meta = serializer.load(os.path.abspath(input_path))
+    serializer.save(
+        graph,
+        cache_path,
+        metadata={
+            "project_root": root,
+            "commit_hash": meta.get("commit_hash"),
+            "file_path": meta.get("file_path"),
+        },
+    )
+
+    click.echo(f"Imported graph cache to: {cache_path}")
 
 
 @ops.command("health")

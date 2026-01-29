@@ -1,6 +1,6 @@
 import json
 import pytest
-from src.report import MarkdownReporter, SarifReporter
+from src.report import DebugReporter, MarkdownReporter, SarifReporter
 
 
 @pytest.fixture
@@ -127,3 +127,15 @@ def test_sarif_reporter_includes_fixes(tmp_path):
     assert replacement["deletedRegion"]["startColumn"] == 5
     assert replacement["deletedRegion"]["endLine"] == 10
     assert replacement["deletedRegion"]["endColumn"] == 16
+
+
+def test_debug_reporter(tmp_path, sample_results):
+    reporter = DebugReporter()
+    output_path = tmp_path / "nsss_debug.json"
+    reporter.generate(sample_results, str(output_path), metadata={"run_id": "123"})
+
+    with open(output_path, "r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+
+    assert payload["metadata"]["run_id"] == "123"
+    assert payload["results"] == sample_results

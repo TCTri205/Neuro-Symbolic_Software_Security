@@ -5,7 +5,8 @@ from click.testing import CliRunner
 
 from src.core.ai.cache_store import LLMCacheStore
 from src.core.config import settings
-from src.core.persistence.graph_serializer import build_cache_path
+from src.core.parser.ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol
+from src.core.persistence.graph_serializer import JsonlGraphSerializer, build_cache_path
 from src.runner.cli.main import cli
 
 
@@ -69,3 +70,58 @@ def test_ops_rotate_logs():
             if entry.startswith("nsss.log.")
         ]
         assert len(rotated) == 1
+
+
+def _sample_graph() -> IRGraph:
+    span = IRSpan(
+        file="sample.py",
+        start_line=1,
+        start_col=0,
+        end_line=1,
+        end_col=10,
+    )
+    node = IRNode(
+        id="Func:sample.py:1:0:0",
+        kind="Function",
+        span=span,
+        parent_id=None,
+        scope_id="scope:module",
+        attrs={"name": "sample"},
+    )
+    edge = IREdge.model_validate(
+        {"from": node.id, "to": node.id, "type": "flow", "guard_id": None}
+    )
+    symbol = IRSymbol(
+        name="sample",
+        kind="function",
+        scope_id="scope:module",
+        defs=[node.id],
+        uses=[],
+    )
+    return IRGraph(nodes=[node], edges=[edge], symbols=[symbol])
+
+
+def test_ops_graph_export_import():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        graph = _sample_graph()
+        serializer = JsonlGraphSerializer()
+        cache_path = build_cache_path(os.getcwd())
+        serializer.save(
+            graph,
+            cache_path,
+            metadata={"project_root": os.getcwd(), "file_path": "sample.py"},
+        )
+
+        export_path = "exported_graph.jsonl"
+        result = runner.invoke(cli, ["ops", "graph-export", "--output", export_path])
+        assert result.exit_code == 0
+        assert os.path.exists(export_path)
+
+        os.remove(cache_path)
+        result = runner.invoke(cli, ["ops", "graph-import", "--input", export_path])
+        assert result.exit_code == 0
+        assert os.path.exists(cache_path)
+
+        loaded_graph, _ = serializer.load(cache_path)
+        assert loaded_graph.model_dump(by_alias=True) == graph.model_dump(by_alias=True)

@@ -3,6 +3,7 @@ import shutil
 import pytest
 from unittest.mock import patch
 from src.report.manager import ReportManager
+from src.report.debug import DebugReporter
 from src.report.markdown import MarkdownReporter
 from src.report.sarif import SarifReporter
 from src.report.ir import IRReporter
@@ -31,19 +32,22 @@ def test_generate_all_success(temp_report_dir, mock_results):
     # But we want to verify the manager logic
     with (
         patch.object(MarkdownReporter, "generate") as mock_md,
+        patch.object(DebugReporter, "generate") as mock_debug,
         patch.object(SarifReporter, "generate") as mock_sarif,
         patch.object(IRReporter, "generate") as mock_ir,
         patch.object(GraphTraceExporter, "generate") as mock_graph,
     ):
         generated = manager.generate_all(mock_results)
 
-        assert len(generated) == 4
+        assert len(generated) == 5
         assert os.path.join(temp_report_dir, "nsss_report.md") in generated
+        assert os.path.join(temp_report_dir, "nsss_debug.json") in generated
         assert os.path.join(temp_report_dir, "nsss_report.sarif") in generated
         assert os.path.join(temp_report_dir, "nsss_report.ir.json") in generated
         assert os.path.join(temp_report_dir, "nsss_graph.json") in generated
 
         mock_md.assert_called_once()
+        mock_debug.assert_called_once()
         mock_sarif.assert_called_once()
         mock_ir.assert_called_once()
         mock_graph.assert_called_once()
@@ -67,6 +71,7 @@ def test_reporter_failure_resilience(temp_report_dir, mock_results):
         patch.object(
             MarkdownReporter, "generate", side_effect=Exception("MD Failed")
         ) as mock_md,
+        patch.object(DebugReporter, "generate") as mock_debug,
         patch.object(SarifReporter, "generate") as mock_sarif,
         patch.object(IRReporter, "generate") as mock_ir,
         patch.object(GraphTraceExporter, "generate") as mock_graph,
@@ -74,12 +79,14 @@ def test_reporter_failure_resilience(temp_report_dir, mock_results):
         generated = manager.generate_all(mock_results)
 
         # Should still generate SARIF + IR + graph even if MD fails
-        assert len(generated) == 3
+        assert len(generated) == 4
         assert any(path.endswith(".sarif") for path in generated)
         assert any(path.endswith(".ir.json") for path in generated)
         assert any(path.endswith("nsss_graph.json") for path in generated)
+        assert any(path.endswith("nsss_debug.json") for path in generated)
 
         mock_md.assert_called_once()
+        mock_debug.assert_called_once()
         mock_sarif.assert_called_once()
         mock_ir.assert_called_once()
         mock_graph.assert_called_once()
