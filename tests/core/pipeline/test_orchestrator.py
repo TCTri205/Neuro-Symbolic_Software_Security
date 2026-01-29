@@ -1,4 +1,7 @@
+import json
 from unittest.mock import patch
+
+from src.core.persistence import build_cache_path
 from src.core.pipeline.orchestrator import AnalysisOrchestrator
 
 
@@ -108,3 +111,19 @@ def main():
                 )
 
         assert has_insights
+
+    def test_ir_graph_persistence_writes_cache(self, tmp_path, monkeypatch):
+        code = """
+def main():
+    return 1
+"""
+        monkeypatch.chdir(tmp_path)
+        orchestrator = AnalysisOrchestrator(enable_ir=True)
+        result = orchestrator.analyze_code(code, "sample.py")
+
+        assert result.ir is not None
+        cache_path = build_cache_path(str(tmp_path))
+        with open(cache_path, "r", encoding="utf-8") as f:
+            meta = json.loads(f.readline())
+        assert meta["type"] == "meta"
+        assert meta["file_path"] == "sample.py"

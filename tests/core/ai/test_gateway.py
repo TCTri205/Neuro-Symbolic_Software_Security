@@ -75,3 +75,22 @@ class TestLLMGatewayService:
 
         with pytest.raises(RuntimeError, match="Circuit breaker open"):
             service.analyze(system_prompt, user_prompt)
+
+    def test_cache_persists_across_instances(self, tmp_path):
+        cache_path = tmp_path / "llm_cache.json"
+        client_one = MockAIClient()
+        client_two = MockAIClient()
+
+        store_one = LLMCacheStore(storage_path=str(cache_path))
+        service_one = LLMGatewayService(client=client_one, cache_store=store_one)
+
+        with patch.object(client_one, "analyze", return_value="Analyzed") as mock_one:
+            service_one.analyze("Sys", "User")
+            mock_one.assert_called_once()
+
+        store_two = LLMCacheStore(storage_path=str(cache_path))
+        service_two = LLMGatewayService(client=client_two, cache_store=store_two)
+
+        with patch.object(client_two, "analyze") as mock_two:
+            assert service_two.analyze("Sys", "User") == "Analyzed"
+            mock_two.assert_not_called()
