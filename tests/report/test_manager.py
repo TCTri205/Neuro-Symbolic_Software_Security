@@ -6,6 +6,7 @@ from src.report.manager import ReportManager
 from src.report.markdown import MarkdownReporter
 from src.report.sarif import SarifReporter
 from src.report.ir import IRReporter
+from src.report.graph import GraphTraceExporter
 
 
 @pytest.fixture
@@ -32,17 +33,20 @@ def test_generate_all_success(temp_report_dir, mock_results):
         patch.object(MarkdownReporter, "generate") as mock_md,
         patch.object(SarifReporter, "generate") as mock_sarif,
         patch.object(IRReporter, "generate") as mock_ir,
+        patch.object(GraphTraceExporter, "generate") as mock_graph,
     ):
         generated = manager.generate_all(mock_results)
 
-        assert len(generated) == 3
+        assert len(generated) == 4
         assert os.path.join(temp_report_dir, "nsss_report.md") in generated
         assert os.path.join(temp_report_dir, "nsss_report.sarif") in generated
         assert os.path.join(temp_report_dir, "nsss_report.ir.json") in generated
+        assert os.path.join(temp_report_dir, "nsss_graph.json") in generated
 
         mock_md.assert_called_once()
         mock_sarif.assert_called_once()
         mock_ir.assert_called_once()
+        mock_graph.assert_called_once()
 
         # Verify dir was created
         assert os.path.exists(temp_report_dir)
@@ -65,17 +69,20 @@ def test_reporter_failure_resilience(temp_report_dir, mock_results):
         ) as mock_md,
         patch.object(SarifReporter, "generate") as mock_sarif,
         patch.object(IRReporter, "generate") as mock_ir,
+        patch.object(GraphTraceExporter, "generate") as mock_graph,
     ):
         generated = manager.generate_all(mock_results)
 
-        # Should still generate SARIF + IR even if MD fails
-        assert len(generated) == 2
+        # Should still generate SARIF + IR + graph even if MD fails
+        assert len(generated) == 3
         assert any(path.endswith(".sarif") for path in generated)
         assert any(path.endswith(".ir.json") for path in generated)
+        assert any(path.endswith("nsss_graph.json") for path in generated)
 
         mock_md.assert_called_once()
         mock_sarif.assert_called_once()
         mock_ir.assert_called_once()
+        mock_graph.assert_called_once()
 
 
 def test_report_type_filtering(temp_report_dir, mock_results):
