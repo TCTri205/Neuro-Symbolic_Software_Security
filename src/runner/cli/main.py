@@ -403,5 +403,323 @@ def _prune_rotated_logs(log_path: str, keep: int) -> None:
             pass
 
 
+@ops.command("backup")
+@click.option(
+    "--target",
+    type=click.Choice(
+        ["baseline", "graph", "llm-cache", "feedback", "all"], case_sensitive=False
+    ),
+    default="all",
+    help="Target to backup.",
+)
+@click.option(
+    "--project-root",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    help="Project root directory.",
+)
+@click.option(
+    "--keep",
+    default=10,
+    show_default=True,
+    type=int,
+    help="Number of backups to keep (older ones pruned).",
+)
+def backup(target: str, project_root: str, keep: int) -> None:
+    """Create backups of NSSS state files."""
+    root = os.path.abspath(project_root)
+    nsss_dir = os.path.join(root, ".nsss")
+
+    if not os.path.exists(nsss_dir):
+        click.echo(f"NSSS directory not found: {nsss_dir}")
+        return
+
+    targets = (
+        ["baseline", "graph", "llm-cache", "feedback"] if target == "all" else [target]
+    )
+    backup_count = 0
+
+    for tgt in targets:
+        backup_path = _create_backup(root, tgt)
+        if backup_path:
+            click.echo(f"Created backup: {backup_path}")
+            backup_count += 1
+            # Prune old backups
+            _prune_backups(root, tgt, keep)
+
+    click.echo(f"Backup complete. Created {backup_count} backup(s).")
+
+
+@ops.command("rollback")
+@click.option(
+    "--target",
+    type=click.Choice(
+        ["baseline", "graph", "llm-cache", "feedback", "all"], case_sensitive=False
+    ),
+    help="Target to rollback (required unless --list).",
+)
+@click.option(
+    "--backup-file",
+    type=click.Path(exists=True, dir_okay=False),
+    help="Specific backup file to restore from.",
+)
+@click.option(
+    "--project-root",
+    default=".",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True),
+    help="Project root directory.",
+)
+@click.option(
+    "--list",
+    "list_backups",
+    is_flag=True,
+    help="List available backups.",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Show what would be restored without making changes.",
+)
+@click.option(
+    "--yes",
+    is_flag=True,
+    help="Skip confirmation prompt.",
+)
+@click.option(
+    "--prune",
+    is_flag=True,
+    help="Prune old backups instead of restoring.",
+)
+@click.option(
+    "--keep",
+    default=10,
+    show_default=True,
+    type=int,
+    help="Number of backups to keep when pruning.",
+)
+def rollback(
+    target: str,
+    backup_file: str,
+    project_root: str,
+    list_backups: bool,
+    dry_run: bool,
+    yes: bool,
+    prune: bool,
+    keep: int,
+) -> None:
+    """Rollback NSSS state files to a previous backup."""
+    root = os.path.abspath(project_root)
+    nsss_dir = os.path.join(root, ".nsss")
+
+    if not os.path.exists(nsss_dir):
+        click.echo(f"NSSS directory not found: {nsss_dir}")
+        return
+
+    # List backups mode
+    if list_backups:
+        _list_all_backups(root)
+        return
+
+    # Prune mode
+    if prune:
+        if not target:
+            click.echo("Error: --target is required for pruning.")
+            return
+        targets = (
+            ["baseline", "graph", "llm-cache", "feedback"]
+            if target == "all"
+            else [target]
+        )
+        for tgt in targets:
+            _prune_backups(root, tgt, keep)
+            click.echo(f"Pruned old backups for {tgt}, keeping {keep} most recent.")
+        return
+
+    # Rollback mode
+    if not target:
+        click.echo("Error: --target is required for rollback.")
+        return
+
+    if target == "all" and backup_file:
+        click.echo("Error: Cannot specify --backup-file with --target=all.")
+        return
+
+    if not yes and not dry_run:
+        if not click.confirm(f"This will restore {target} from backup. Continue?"):
+            click.echo("Rollback cancelled.")
+            return
+
+    targets = (
+        ["baseline", "graph", "llm-cache", "feedback"] if target == "all" else [target]
+    )
+
+    for tgt in targets:
+        if backup_file and tgt != target:
+            continue
+
+        restore_from = backup_file if backup_file else _find_latest_backup(root, tgt)
+
+        if not restore_from:
+            click.echo(f"No backup found for {tgt}.")
+            continue
+
+        if dry_run:
+            click.echo(f"[DRY RUN] Would restore {tgt} from: {restore_from}")
+        else:
+            _restore_from_backup(root, tgt, restore_from)
+            click.echo(f"Rolled back {tgt} from: {restore_from}")
+
+
+def _create_backup(project_root: str, target: str) -> str:
+    """Create a backup of a target file."""
+    timestamp = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    nsss_dir = os.path.join(project_root, ".nsss")
+
+    if target == "baseline":
+        source = os.path.join(nsss_dir, "baseline.json")
+    elif target == "graph":
+        from src.core.persistence.graph_serializer import build_cache_path
+
+        source = build_cache_path(project_root)
+    elif target == "llm-cache":
+        source = os.path.join(nsss_dir, "cache", "llm_cache.json")
+    elif target == "feedback":
+        source = os.path.join(nsss_dir, "feedback.json")
+    else:
+        return ""
+
+    if not os.path.exists(source):
+        return ""
+
+    backup_path = f"{source}.backup.{timestamp}"
+    shutil.copy2(source, backup_path)
+    return backup_path
+
+
+def _find_latest_backup(project_root: str, target: str) -> str:
+    """Find the most recent backup for a target."""
+    nsss_dir = os.path.join(project_root, ".nsss")
+
+    if target == "baseline":
+        pattern = os.path.join(nsss_dir, "baseline.json.backup.*")
+    elif target == "graph":
+        from src.core.persistence.graph_serializer import build_cache_path
+
+        base_path = build_cache_path(project_root)
+        pattern = f"{base_path}.backup.*"
+    elif target == "llm-cache":
+        pattern = os.path.join(nsss_dir, "cache", "llm_cache.json.backup.*")
+    elif target == "feedback":
+        pattern = os.path.join(nsss_dir, "feedback.json.backup.*")
+    else:
+        return ""
+
+    import glob
+
+    backups = glob.glob(pattern)
+    if not backups:
+        return ""
+
+    backups.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+    return backups[0]
+
+
+def _restore_from_backup(project_root: str, target: str, backup_path: str) -> None:
+    """Restore a target from a backup file."""
+    nsss_dir = os.path.join(project_root, ".nsss")
+
+    if target == "baseline":
+        dest = os.path.join(nsss_dir, "baseline.json")
+    elif target == "graph":
+        from src.core.persistence.graph_serializer import build_cache_path
+
+        dest = build_cache_path(project_root)
+    elif target == "llm-cache":
+        dest = os.path.join(nsss_dir, "cache", "llm_cache.json")
+    elif target == "feedback":
+        dest = os.path.join(nsss_dir, "feedback.json")
+    else:
+        return
+
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    shutil.copy2(backup_path, dest)
+
+
+def _prune_backups(project_root: str, target: str, keep: int) -> None:
+    """Prune old backups, keeping only the N most recent."""
+    if keep < 0:
+        return
+
+    nsss_dir = os.path.join(project_root, ".nsss")
+
+    if target == "baseline":
+        pattern = os.path.join(nsss_dir, "baseline.json.backup.*")
+    elif target == "graph":
+        from src.core.persistence.graph_serializer import build_cache_path
+
+        base_path = build_cache_path(project_root)
+        pattern = f"{base_path}.backup.*"
+    elif target == "llm-cache":
+        pattern = os.path.join(nsss_dir, "cache", "llm_cache.json.backup.*")
+    elif target == "feedback":
+        pattern = os.path.join(nsss_dir, "feedback.json.backup.*")
+    else:
+        return
+
+    import glob
+
+    backups = glob.glob(pattern)
+    backups.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+
+    for backup_path in backups[keep:]:
+        try:
+            os.remove(backup_path)
+        except OSError:
+            pass
+
+
+def _list_all_backups(project_root: str) -> None:
+    """List all available backups."""
+    nsss_dir = os.path.join(project_root, ".nsss")
+    click.echo("Available backups:\n")
+
+    targets = ["baseline", "graph", "llm-cache", "feedback"]
+    found_any = False
+
+    for target in targets:
+        if target == "baseline":
+            pattern = os.path.join(nsss_dir, "baseline.json.backup.*")
+        elif target == "graph":
+            from src.core.persistence.graph_serializer import build_cache_path
+
+            base_path = build_cache_path(project_root)
+            pattern = f"{base_path}.backup.*"
+        elif target == "llm-cache":
+            pattern = os.path.join(nsss_dir, "cache", "llm_cache.json.backup.*")
+        elif target == "feedback":
+            pattern = os.path.join(nsss_dir, "feedback.json.backup.*")
+        else:
+            continue
+
+        import glob
+
+        backups = glob.glob(pattern)
+        if backups:
+            found_any = True
+            click.echo(f"{target.upper()}:")
+            backups.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+            for backup_path in backups:
+                size = os.path.getsize(backup_path)
+                mtime = datetime.datetime.fromtimestamp(os.path.getmtime(backup_path))
+                click.echo(f"  - {backup_path}")
+                click.echo(
+                    f"    Size: {_format_bytes(size)}, Modified: {mtime.isoformat()}"
+                )
+            click.echo()
+
+    if not found_any:
+        click.echo("No backups found.")
+
+
 if __name__ == "__main__":
     cli()
