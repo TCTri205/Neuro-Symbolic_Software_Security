@@ -62,10 +62,12 @@ class DiffScanner:
             return set()
 
         # Load existing graph to build dependency map
-        graph, _ = self.persistence.load_ir_graph(self.project_root)
-        if not graph:
-            logger.warning("No existing graph found. Returning only changed files.")
+        loaded = self.persistence.load_project_graph(self.project_root, strict=True)
+        if not loaded:
+            logger.warning("No fresh graph cache found. Returning only changed files.")
             return set(changed_files)
+
+        graph, _ = loaded
 
         impact_map = self._build_impact_map(graph)
 

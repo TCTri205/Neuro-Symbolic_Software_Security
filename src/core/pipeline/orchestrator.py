@@ -271,21 +271,33 @@ class AnalysisOrchestrator:
         # Step 2.5: IR (optional)
         if self.enable_ir:
             try:
-                with MeasureLatency("parse_ir"):
-                    parser = PythonAstParser(
-                        source_code,
-                        file_path,
-                        enable_docstring_stripping=self.enable_docstring_stripping,
-                    )
-                    ir_graph = parser.parse()
-                    result.ir = ir_graph.model_dump(by_alias=True)
+                cached_graph = None
                 if file_path and file_path != "<unknown>":
-                    try:
-                        GraphPersistenceService.get_instance().save_ir_graph(
-                            ir_graph, file_path
+                    cached_graph = (
+                        GraphPersistenceService.get_instance().load_ir_graph_for_file(
+                            file_path, strict=True
                         )
-                    except Exception as e:
-                        self.logger.error(f"Graph persistence failed: {e}")
+                    )
+
+                if cached_graph:
+                    ir_graph, _meta = cached_graph
+                    result.ir = ir_graph.model_dump(by_alias=True)
+                else:
+                    with MeasureLatency("parse_ir"):
+                        parser = PythonAstParser(
+                            source_code,
+                            file_path,
+                            enable_docstring_stripping=self.enable_docstring_stripping,
+                        )
+                        ir_graph = parser.parse()
+                        result.ir = ir_graph.model_dump(by_alias=True)
+                    if file_path and file_path != "<unknown>":
+                        try:
+                            GraphPersistenceService.get_instance().save_ir_graph(
+                                ir_graph, file_path
+                            )
+                        except Exception as e:
+                            self.logger.error(f"Graph persistence failed: {e}")
             except Exception as e:
                 msg = f"IR parsing failed: {e}"
                 self.logger.error(msg)

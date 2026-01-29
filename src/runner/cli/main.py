@@ -306,18 +306,15 @@ def clear_cache(llm_cache: bool, graph_cache: bool, project_root: str) -> None:
         click.echo(f"Cleared LLM cache: {os.path.abspath(store.storage_path)}")
 
     if graph_cache:
-        from src.core.persistence.graph_serializer import build_cache_path
+        from src.core.persistence.graph_serializer import build_cache_dir
 
         root = os.path.abspath(project_root)
-        graph_cache_path = build_cache_path(root)
-        if os.path.exists(graph_cache_path):
-            os.remove(graph_cache_path)
-            click.echo(f"Removed graph cache: {graph_cache_path}")
-            cache_dir = os.path.dirname(graph_cache_path)
-            if os.path.isdir(cache_dir) and not os.listdir(cache_dir):
-                os.rmdir(cache_dir)
+        graph_cache_dir = build_cache_dir(root)
+        if os.path.exists(graph_cache_dir):
+            shutil.rmtree(graph_cache_dir)
+            click.echo(f"Removed graph cache directory: {graph_cache_dir}")
         else:
-            click.echo(f"Graph cache not found: {graph_cache_path}")
+            click.echo(f"Graph cache not found: {graph_cache_dir}")
 
 
 @ops.command("graph-export")
@@ -335,22 +332,20 @@ def clear_cache(llm_cache: bool, graph_cache: bool, project_root: str) -> None:
 )
 def graph_export(project_root: str, output: str) -> None:
     """Export the persisted IR graph cache to a file."""
-    from src.core.persistence.graph_serializer import (
-        JsonlGraphSerializer,
-        build_cache_path,
-    )
+    from src.core.persistence.graph_serializer import JsonlGraphSerializer
+    from src.core.persistence import GraphPersistenceService
 
     root = os.path.abspath(project_root)
-    cache_path = build_cache_path(root)
-    if not os.path.exists(cache_path):
-        raise click.ClickException(f"Graph cache not found: {cache_path}")
+    persistence = GraphPersistenceService.get_instance()
+    loaded = persistence.load_project_graph(root, strict=True)
+    if not loaded:
+        raise click.ClickException("Graph cache not found or stale")
 
+    graph, meta = loaded
     serializer = JsonlGraphSerializer()
-    serializer.load(cache_path)
-
     output_path = os.path.abspath(output)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    shutil.copyfile(cache_path, output_path)
+    serializer.save(graph, output_path, metadata=meta)
     click.echo(f"Exported graph cache to: {output_path}")
 
 
@@ -370,27 +365,16 @@ def graph_export(project_root: str, output: str) -> None:
 )
 def graph_import(project_root: str, input_path: str) -> None:
     """Import a persisted IR graph cache file into this project."""
-    from src.core.persistence.graph_serializer import (
-        JsonlGraphSerializer,
-        build_cache_path,
-    )
+    from src.core.persistence.graph_serializer import JsonlGraphSerializer
+    from src.core.persistence import GraphPersistenceService
 
     root = os.path.abspath(project_root)
-    cache_path = build_cache_path(root)
     serializer = JsonlGraphSerializer()
+    graph, _meta = serializer.load(os.path.abspath(input_path))
 
-    graph, meta = serializer.load(os.path.abspath(input_path))
-    serializer.save(
-        graph,
-        cache_path,
-        metadata={
-            "project_root": root,
-            "commit_hash": meta.get("commit_hash"),
-            "file_path": meta.get("file_path"),
-        },
-    )
-
-    click.echo(f"Imported graph cache to: {cache_path}")
+    persistence = GraphPersistenceService.get_instance()
+    saved_count = persistence.save_project_graph(graph, project_root=root)
+    click.echo(f"Imported graph cache entries: {saved_count}")
 
 
 @ops.command("health")
@@ -403,7 +387,7 @@ def graph_import(project_root: str, input_path: str) -> None:
 def health(project_root: str) -> None:
     """Run a basic health check of local NSSS state."""
     from src.core.ai.cache_store import LLMCacheStore
-    from src.core.persistence.graph_serializer import build_cache_path
+    from src.core.persistence.graph_serializer import build_manifest_path
 
     click.echo("NSSS Ops Health Check")
     root = os.path.abspath(project_root)
@@ -413,8 +397,8 @@ def health(project_root: str) -> None:
     llm_status = _describe_path(llm_store.storage_path)
     click.echo(f"LLM cache: {llm_status}")
 
-    graph_cache_path = build_cache_path(root)
-    graph_status = _describe_path(graph_cache_path)
+    graph_manifest_path = build_manifest_path(root)
+    graph_status = _describe_path(graph_manifest_path)
     click.echo(f"Graph cache: {graph_status}")
 
     baseline_path = os.path.abspath(os.path.join(root, ".nsss", "baseline.json"))
@@ -685,9 +669,9 @@ def _create_backup(project_root: str, target: str) -> str:
     if target == "baseline":
         source = os.path.join(nsss_dir, "baseline.json")
     elif target == "graph":
-        from src.core.persistence.graph_serializer import build_cache_path
+        from src.core.persistence.graph_serializer import build_cache_dir
 
-        source = build_cache_path(project_root)
+        source = build_cache_dir(project_root)
     elif target == "llm-cache":
         source = os.path.join(nsss_dir, "cache", "llm_cache.json")
     elif target == "feedback":
@@ -699,7 +683,10 @@ def _create_backup(project_root: str, target: str) -> str:
         return ""
 
     backup_path = f"{source}.backup.{timestamp}"
-    shutil.copy2(source, backup_path)
+    if os.path.isdir(source):
+        shutil.copytree(source, backup_path)
+    else:
+        shutil.copy2(source, backup_path)
     return backup_path
 
 
@@ -710,9 +697,9 @@ def _find_latest_backup(project_root: str, target: str) -> str:
     if target == "baseline":
         pattern = os.path.join(nsss_dir, "baseline.json.backup.*")
     elif target == "graph":
-        from src.core.persistence.graph_serializer import build_cache_path
+        from src.core.persistence.graph_serializer import build_cache_dir
 
-        base_path = build_cache_path(project_root)
+        base_path = build_cache_dir(project_root)
         pattern = f"{base_path}.backup.*"
     elif target == "llm-cache":
         pattern = os.path.join(nsss_dir, "cache", "llm_cache.json.backup.*")
@@ -738,9 +725,9 @@ def _restore_from_backup(project_root: str, target: str, backup_path: str) -> No
     if target == "baseline":
         dest = os.path.join(nsss_dir, "baseline.json")
     elif target == "graph":
-        from src.core.persistence.graph_serializer import build_cache_path
+        from src.core.persistence.graph_serializer import build_cache_dir
 
-        dest = build_cache_path(project_root)
+        dest = build_cache_dir(project_root)
     elif target == "llm-cache":
         dest = os.path.join(nsss_dir, "cache", "llm_cache.json")
     elif target == "feedback":
@@ -748,8 +735,14 @@ def _restore_from_backup(project_root: str, target: str, backup_path: str) -> No
     else:
         return
 
-    os.makedirs(os.path.dirname(dest), exist_ok=True)
-    shutil.copy2(backup_path, dest)
+    if os.path.isdir(backup_path):
+        if os.path.exists(dest):
+            shutil.rmtree(dest)
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copytree(backup_path, dest)
+    else:
+        os.makedirs(os.path.dirname(dest), exist_ok=True)
+        shutil.copy2(backup_path, dest)
 
 
 def _prune_backups(project_root: str, target: str, keep: int) -> None:
@@ -762,9 +755,9 @@ def _prune_backups(project_root: str, target: str, keep: int) -> None:
     if target == "baseline":
         pattern = os.path.join(nsss_dir, "baseline.json.backup.*")
     elif target == "graph":
-        from src.core.persistence.graph_serializer import build_cache_path
+        from src.core.persistence.graph_serializer import build_cache_dir
 
-        base_path = build_cache_path(project_root)
+        base_path = build_cache_dir(project_root)
         pattern = f"{base_path}.backup.*"
     elif target == "llm-cache":
         pattern = os.path.join(nsss_dir, "cache", "llm_cache.json.backup.*")
@@ -780,7 +773,10 @@ def _prune_backups(project_root: str, target: str, keep: int) -> None:
 
     for backup_path in backups[keep:]:
         try:
-            os.remove(backup_path)
+            if os.path.isdir(backup_path):
+                shutil.rmtree(backup_path)
+            else:
+                os.remove(backup_path)
         except OSError:
             pass
 
@@ -797,9 +793,9 @@ def _list_all_backups(project_root: str) -> None:
         if target == "baseline":
             pattern = os.path.join(nsss_dir, "baseline.json.backup.*")
         elif target == "graph":
-            from src.core.persistence.graph_serializer import build_cache_path
+            from src.core.persistence.graph_serializer import build_cache_dir
 
-            base_path = build_cache_path(project_root)
+            base_path = build_cache_dir(project_root)
             pattern = f"{base_path}.backup.*"
         elif target == "llm-cache":
             pattern = os.path.join(nsss_dir, "cache", "llm_cache.json.backup.*")

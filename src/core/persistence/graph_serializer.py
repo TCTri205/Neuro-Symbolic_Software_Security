@@ -13,6 +13,7 @@ from src.core.telemetry import get_logger
 
 
 GRAPH_CACHE_FILENAME = "graph_v1.jsonl"
+FILE_CACHE_PREFIX = "graph_file_"
 MANIFEST_FILENAME = "manifest.json"
 
 logger = get_logger(__name__)
@@ -23,9 +24,23 @@ def compute_project_hash(project_root: str) -> str:
     return hashlib.sha256(normalized).hexdigest()
 
 
-def build_cache_path(project_root: str, filename: str = GRAPH_CACHE_FILENAME) -> str:
+def build_cache_dir(project_root: str) -> str:
     project_hash = compute_project_hash(project_root)
-    return os.path.join(project_root, ".nsss", "cache", project_hash, filename)
+    return os.path.join(project_root, ".nsss", "cache", project_hash)
+
+
+def build_cache_path(project_root: str, filename: str = GRAPH_CACHE_FILENAME) -> str:
+    return os.path.join(build_cache_dir(project_root), filename)
+
+
+def build_file_cache_path(project_root: str, file_path: str) -> str:
+    normalized = os.path.abspath(file_path)
+    try:
+        relative = os.path.relpath(normalized, project_root)
+    except ValueError:
+        relative = normalized
+    digest = hashlib.sha256(relative.encode("utf-8")).hexdigest()
+    return build_cache_path(project_root, f"{FILE_CACHE_PREFIX}{digest}.jsonl")
 
 
 def build_manifest_path(project_root: str) -> str:
@@ -166,6 +181,9 @@ class GraphManifestStore:
         normalized = self._normalize_file_path(file_path)
         return self._manifest.entries.get(normalized)
 
+    def list_entries(self) -> Dict[str, GraphManifestEntry]:
+        return dict(self._manifest.entries)
+
     def _normalize_file_path(self, file_path: str) -> str:
         abs_path = os.path.abspath(file_path)
         try:
@@ -294,7 +312,7 @@ class GraphPersistenceService:
         project_root: Optional[str] = None,
     ) -> str:
         root = os.path.abspath(project_root or os.getcwd())
-        cache_path = build_cache_path(root)
+        cache_path = build_file_cache_path(root, file_path)
         self._serializer.save(
             graph,
             cache_path,
@@ -307,10 +325,83 @@ class GraphPersistenceService:
         self._update_manifest(root, file_path, cache_path)
         return cache_path
 
-    def load_ir_graph(self, project_root: Optional[str] = None) -> Tuple[IRGraph, Dict]:
+    def load_ir_graph_for_file(
+        self,
+        file_path: str,
+        project_root: Optional[str] = None,
+        strict: bool = True,
+    ) -> Optional[Tuple[IRGraph, Dict[str, Any]]]:
         root = os.path.abspath(project_root or os.getcwd())
-        cache_path = build_cache_path(root)
-        return self._serializer.load(cache_path)
+        store = GraphManifestStore(root, version=self._serializer.version)
+        if not store.is_fresh(file_path):
+            return None
+        entry = store.get_entry(file_path)
+        if not entry:
+            return None
+        if not os.path.exists(entry.cache_path):
+            return None
+        try:
+            return self._serializer.load(entry.cache_path)
+        except Exception as exc:
+            if strict:
+                logger.warning(f"Failed to load cached graph: {exc}")
+                return None
+            return None
+
+    def load_project_graph(
+        self, project_root: Optional[str] = None, strict: bool = True
+    ) -> Optional[Tuple[IRGraph, Dict[str, Any]]]:
+        root = os.path.abspath(project_root or os.getcwd())
+        store = GraphManifestStore(root, version=self._serializer.version)
+        entries = store.list_entries()
+        if not entries:
+            return None
+
+        merged = IRGraph()
+        for entry in entries.values():
+            entry_path = os.path.abspath(os.path.join(root, entry.file_path))
+            if not store.is_fresh(entry_path) or not os.path.exists(entry.cache_path):
+                if strict:
+                    return None
+                continue
+            try:
+                graph, _meta = self._serializer.load(entry.cache_path)
+            except Exception as exc:
+                if strict:
+                    logger.warning(f"Failed to load cached graph: {exc}")
+                    return None
+                continue
+            self._merge_graphs(merged, graph)
+
+        if not merged.nodes and not merged.edges and not merged.symbols:
+            return None
+
+        meta = self._serializer._build_meta(
+            {
+                "project_root": root,
+                "commit_hash": read_git_commit_hash(root),
+                "file_path": None,
+            }
+        ).to_dict()
+        return merged, meta
+
+    def load_ir_graph(self, project_root: Optional[str] = None) -> Tuple[IRGraph, Dict]:
+        loaded = self.load_project_graph(project_root=project_root, strict=True)
+        if not loaded:
+            raise FileNotFoundError("Graph cache not found or stale")
+        return loaded
+
+    def save_project_graph(
+        self,
+        graph: Union[IRGraph, Dict[str, Any]],
+        project_root: Optional[str] = None,
+    ) -> int:
+        root = os.path.abspath(project_root or os.getcwd())
+        graph_model = self._serializer._coerce_graph(graph)
+        by_file = self._split_graph_by_file(graph_model)
+        for file_path, subgraph in by_file.items():
+            self.save_ir_graph(subgraph, file_path, project_root=root)
+        return len(by_file)
 
     def _update_manifest(
         self, project_root: str, file_path: str, cache_path: str
@@ -321,3 +412,78 @@ class GraphPersistenceService:
         entry = store.record(file_path, cache_path)
         if entry is None:
             logger.debug("Skipping manifest update; file hash unavailable")
+
+    def _merge_graphs(self, target: IRGraph, source: IRGraph) -> None:
+        node_ids = {node.id for node in target.nodes}
+        edge_keys = {
+            (edge.from_id, edge.to, edge.type, edge.guard_id) for edge in target.edges
+        }
+        symbol_keys = {(sym.name, sym.kind, sym.scope_id) for sym in target.symbols}
+
+        for node in source.nodes:
+            if node.id not in node_ids:
+                target.nodes.append(node)
+                node_ids.add(node.id)
+
+        for edge in source.edges:
+            key = (edge.from_id, edge.to, edge.type, edge.guard_id)
+            if key not in edge_keys:
+                target.edges.append(edge)
+                edge_keys.add(key)
+
+        for symbol in source.symbols:
+            key = (symbol.name, symbol.kind, symbol.scope_id)
+            if key not in symbol_keys:
+                target.symbols.append(symbol)
+                symbol_keys.add(key)
+
+    def _split_graph_by_file(self, graph: IRGraph) -> Dict[str, IRGraph]:
+        by_file: Dict[str, IRGraph] = {}
+        node_file_map: Dict[str, str] = {}
+
+        for node in graph.nodes:
+            file_path = node.span.file if node.span else ""
+            if not file_path:
+                continue
+            node_file_map[node.id] = file_path
+            if file_path not in by_file:
+                by_file[file_path] = IRGraph()
+            by_file[file_path].nodes.append(node)
+
+        for edge in graph.edges:
+            source_file = node_file_map.get(edge.from_id)
+            target_file = node_file_map.get(edge.to)
+            if not source_file or not target_file or source_file != target_file:
+                continue
+            by_file[source_file].edges.append(edge)
+
+        for symbol in graph.symbols:
+            symbol_files = set()
+            for node_id in symbol.defs + symbol.uses:
+                file_path = node_file_map.get(node_id)
+                if file_path:
+                    symbol_files.add(file_path)
+            for file_path in symbol_files:
+                if file_path not in by_file:
+                    by_file[file_path] = IRGraph()
+                filtered_defs = [
+                    node_id
+                    for node_id in symbol.defs
+                    if node_file_map.get(node_id) == file_path
+                ]
+                filtered_uses = [
+                    node_id
+                    for node_id in symbol.uses
+                    if node_file_map.get(node_id) == file_path
+                ]
+                by_file[file_path].symbols.append(
+                    IRSymbol(
+                        name=symbol.name,
+                        kind=symbol.kind,
+                        scope_id=symbol.scope_id,
+                        defs=filtered_defs,
+                        uses=filtered_uses,
+                    )
+                )
+
+        return by_file

@@ -1,7 +1,7 @@
 import json
 from unittest.mock import patch
 
-from src.core.persistence import build_cache_path
+from src.core.persistence import build_file_cache_path
 from src.core.pipeline.orchestrator import AnalysisOrchestrator
 
 
@@ -122,7 +122,7 @@ def main():
         result = orchestrator.analyze_code(code, "sample.py")
 
         assert result.ir is not None
-        cache_path = build_cache_path(str(tmp_path))
+        cache_path = build_file_cache_path(str(tmp_path), "sample.py")
         with open(cache_path, "r", encoding="utf-8") as f:
             meta = json.loads(f.readline())
         assert meta["type"] == "meta"

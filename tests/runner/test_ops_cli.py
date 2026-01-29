@@ -6,7 +6,8 @@ from click.testing import CliRunner
 from src.core.ai.cache_store import LLMCacheStore
 from src.core.config import settings
 from src.core.parser.ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol
-from src.core.persistence.graph_serializer import JsonlGraphSerializer, build_cache_path
+from src.core.persistence import GraphPersistenceService
+from src.core.persistence.graph_serializer import build_cache_dir
 from src.runner.cli.main import cli
 
 
@@ -20,8 +21,9 @@ def test_ops_clear_cache():
             store = LLMCacheStore.get_instance()
             store.set("key", "value")
 
-            graph_cache_path = build_cache_path(os.getcwd())
-            os.makedirs(os.path.dirname(graph_cache_path), exist_ok=True)
+            graph_cache_dir = build_cache_dir(os.getcwd())
+            os.makedirs(graph_cache_dir, exist_ok=True)
+            graph_cache_path = os.path.join(graph_cache_dir, "stub.jsonl")
             with open(graph_cache_path, "w", encoding="utf-8") as handle:
                 handle.write("{}")
 
@@ -31,7 +33,7 @@ def test_ops_clear_cache():
             with open(store.storage_path, "r", encoding="utf-8") as handle:
                 data = json.load(handle)
             assert data == {}
-            assert not os.path.exists(graph_cache_path)
+            assert not os.path.exists(graph_cache_dir)
     finally:
         settings.LLM_CACHE_PATH = original_cache_path
         LLMCacheStore._instance = None
@@ -105,23 +107,25 @@ def test_ops_graph_export_import():
     runner = CliRunner()
     with runner.isolated_filesystem():
         graph = _sample_graph()
-        serializer = JsonlGraphSerializer()
-        cache_path = build_cache_path(os.getcwd())
-        serializer.save(
-            graph,
-            cache_path,
-            metadata={"project_root": os.getcwd(), "file_path": "sample.py"},
-        )
+        sample_path = os.path.join(os.getcwd(), "sample.py")
+        with open(sample_path, "w", encoding="utf-8") as handle:
+            handle.write("def sample():\n    return 1\n")
+        GraphPersistenceService.get_instance().save_ir_graph(graph, "sample.py")
 
         export_path = "exported_graph.jsonl"
         result = runner.invoke(cli, ["ops", "graph-export", "--output", export_path])
         assert result.exit_code == 0
         assert os.path.exists(export_path)
 
-        os.remove(cache_path)
+        graph_cache_dir = build_cache_dir(os.getcwd())
+        if os.path.exists(graph_cache_dir):
+            for entry in os.listdir(graph_cache_dir):
+                os.remove(os.path.join(graph_cache_dir, entry))
         result = runner.invoke(cli, ["ops", "graph-import", "--input", export_path])
         assert result.exit_code == 0
-        assert os.path.exists(cache_path)
+        assert os.path.exists(graph_cache_dir)
 
-        loaded_graph, _ = serializer.load(cache_path)
+        loaded_graph, _ = GraphPersistenceService.get_instance().load_project_graph(
+            os.getcwd(), strict=True
+        )
         assert loaded_graph.model_dump(by_alias=True) == graph.model_dump(by_alias=True)

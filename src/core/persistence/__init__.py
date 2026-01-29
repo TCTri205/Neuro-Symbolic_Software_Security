@@ -1,4 +1,5 @@
 from .graph_serializer import (
+    FILE_CACHE_PREFIX,
     GRAPH_CACHE_FILENAME,
     MANIFEST_FILENAME,
     GraphPersistenceService,
@@ -6,7 +7,9 @@ from .graph_serializer import (
     GraphManifestEntry,
     GraphManifestStore,
     JsonlGraphSerializer,
+    build_cache_dir,
     build_cache_path,
+    build_file_cache_path,
     build_manifest_path,
     compute_file_hash,
     compute_project_hash,
@@ -15,13 +18,16 @@ from .graph_serializer import (
 
 __all__ = [
     "GRAPH_CACHE_FILENAME",
+    "FILE_CACHE_PREFIX",
     "MANIFEST_FILENAME",
     "GraphPersistenceService",
     "GraphManifest",
     "GraphManifestEntry",
     "GraphManifestStore",
     "JsonlGraphSerializer",
+    "build_cache_dir",
     "build_cache_path",
+    "build_file_cache_path",
     "build_manifest_path",
     "compute_file_hash",
     "compute_project_hash",
