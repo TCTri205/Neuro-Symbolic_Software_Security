@@ -1,6 +1,5 @@
 """Tests for monitoring thresholds and alerting."""
 
-
 from src.core.telemetry.thresholds import (
     AlertLevel,
     LatencyThreshold,

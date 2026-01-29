@@ -8,6 +8,7 @@ Hệ thống sinh ra 2 loại file báo cáo sau mỗi lần quét:
 
 1.  **`nsss_report.sarif`** (Chính): Chuẩn công nghiệp. Dùng để hiển thị lỗi, tích hợp CI/CD.
 2.  **`nsss_debug.json`** (Phụ): Format nội bộ chi tiết. Dùng để debug, chứa raw data từ SSA và LLM reasoning trace.
+3.  **`nsss_graph.json`** (Visualization): Format đồ thị taint path. Xem chi tiết tại [14_Graph_Visualization_Spec.md](./14_Graph_Visualization_Spec.md).
 
 ## 2. Cấu Trúc SARIF Mapping
 
