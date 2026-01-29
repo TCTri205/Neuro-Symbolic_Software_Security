@@ -17,9 +17,228 @@ Hệ thống hỗ trợ hai hình thức triển khai chính:
 
 ## 2. Giám sát và Cảnh báo (Monitoring & Alerts)
 
-*   **Token Usage:** Theo dõi chi phí Token nếu sử dụng Cloud API. Hệ thống có cơ chế **Circuit Breaker** để ngắt scan nếu chi phí vượt ngưỡng.
-*   **Scan Latency:** Giám sát thời gian phân tích của từng Stage, đặc biệt là Stage 4 (LLM Verification).
-*   **False Positive Rate:** Theo dõi phản hồi từ Developer thông qua Feedback Loop để tinh chỉnh Risk Ranker.
+Hệ thống NSSS sử dụng monitoring thresholds tự động để phát hiện vấn đề hoạt động và chất lượng.
+
+### 2.1. Monitoring Thresholds (Ngưỡng Giám sát)
+
+#### Token Usage Thresholds (Chi phí Token)
+
+| Metric | Warning Threshold | Critical Threshold | Mô tả |
+|--------|-------------------|--------------------|-----------------------|
+| **Tokens per Request** | 6,000 tokens | 8,000 tokens | Số token cho một LLM call |
+| **Tokens per Scan** | 75,000 tokens | 100,000 tokens | Tổng token cho toàn bộ scan |
+| **Cost per Scan** | $3.00 USD | $5.00 USD | Chi phí ước tính (GPT-4 pricing) |
+
+**Mục đích:**
+- Ngăn ngừa chi phí API vượt kiểm soát
+- Phát hiện prompt expansion quá lớn
+- Circuit Breaker tự động kích hoạt khi vượt Critical threshold
+
+**Cách điều chỉnh:** Xem `src/core/telemetry/thresholds.py` - `TokenThreshold`
+
+#### Latency Thresholds (Thời gian phản hồi)
+
+| Operation | Warning (ms) | Critical (ms) | Mô tả |
+|-----------|--------------|---------------|-------|
+| **Parse** | 3,000 | 5,000 | Phân tích AST từ source code |
+| **CFG Build** | 7,000 | 10,000 | Xây dựng Control Flow Graph |
+| **LLM Call** | 20,000 | 30,000 | Một LLM API call (semantic verification) |
+| **Total Scan** | 90,000 (1.5m) | 120,000 (2m) | Toàn bộ scan một project |
+
+**Mục đích:**
+- Phát hiện performance degradation
+- Xác định bottleneck trong pipeline
+- Cảnh báo timeout trước khi xảy ra
+
+**Cách điều chỉnh:** Xem `src/core/telemetry/thresholds.py` - `LatencyThreshold`
+
+#### Quality Metrics Thresholds (Chất lượng phát hiện)
+
+| Metric | Warning Threshold | Critical Threshold | Mô tả |
+|--------|-------------------|--------------------|-----------------------|
+| **Precision** | < 80% | < 70% | TP / (TP + FP) - Độ chính xác |
+| **Recall** | < 70% | < 60% | TP / (TP + FN) - Độ phủ |
+| **False Positive Rate** | > 20% | > 30% | FP / (FP + TN) - Tỷ lệ báo sai |
+
+**Mục đích:**
+- Đảm bảo chất lượng phát hiện lỗ hổng
+- Cân bằng giữa Precision và Recall
+- Phát hiện sớm model degradation
+
+**Cách điều chỉnh:** Xem `src/core/telemetry/thresholds.py` - `QualityThreshold`
+
+### 2.2. Cách sử dụng Monitoring Thresholds
+
+#### Trong Code (Programmatic)
+
+```python
+from src.core.telemetry.thresholds import ThresholdChecker, get_threshold_checker
+
+# Sử dụng checker mặc định
+checker = get_threshold_checker()
+
+# Kiểm tra token usage
+alerts = checker.check_token_usage(
+    prompt_tokens=4000,
+    completion_tokens=2500,
+    scan_total_tokens=50000
+)
+
+# Kiểm tra latency
+alerts = checker.check_latency("llm_call", duration_ms=25000)
+
+# Kiểm tra quality metrics
+alerts = checker.check_quality_metrics(
+    precision=0.85,
+    recall=0.75,
+    fpr=0.18
+)
+
+# Lấy tất cả alerts
+all_alerts = checker.get_alerts()
+critical_alerts = checker.get_alerts(level=AlertLevel.CRITICAL)
+token_alerts = checker.get_alerts(category="token")
+```
+
+#### Custom Thresholds (Tùy chỉnh ngưỡng)
+
+```python
+from src.core.telemetry.thresholds import (
+    MonitoringThresholds,
+    TokenThreshold,
+    ThresholdChecker
+)
+
+# Tạo custom thresholds cho môi trường production nghiêm ngặt hơn
+custom_thresholds = MonitoringThresholds(
+    token=TokenThreshold(
+        max_tokens_per_request=6000,  # Giảm từ 8000
+        max_tokens_per_scan=80_000,  # Giảm từ 100_000
+        max_cost_per_scan_usd=3.0  # Giảm từ 5.0
+    )
+)
+
+# Sử dụng custom thresholds
+checker = ThresholdChecker(custom_thresholds)
+```
+
+### 2.3. Alert Levels và Response
+
+#### INFO
+- **Mô tả:** Thông tin bình thường, không cần hành động
+- **Action:** Ghi log để phân tích sau
+
+#### WARNING
+- **Mô tả:** Tiệm cận ngưỡng, cần theo dõi
+- **Action:**
+  - Ghi log và thông báo team
+  - Kiểm tra trend (nếu liên tục tăng -> cần tối ưu)
+  - Không cần dừng scan
+
+#### CRITICAL
+- **Mô tả:** Vượt ngưỡng tối đa, có thể gây lỗi
+- **Action:**
+  - **Token:** Circuit Breaker kích hoạt, dừng scan
+  - **Latency:** Timeout risk, cần investigation ngay
+  - **Quality:** Model đang underperform, cần retrain/điều chỉnh
+
+### 2.4. Monitoring Best Practices
+
+#### 1. Thiết lập Alerts
+
+```python
+# Ví dụ: Gửi alert qua email/Slack khi CRITICAL
+def send_alert(alert):
+    if alert.level == AlertLevel.CRITICAL:
+        slack.send_message(f"🚨 CRITICAL: {alert.message}")
+        email.send(f"Alert: {alert.message}")
+
+# Hook vào logging
+import logging
+logging.basicConfig(
+    level=logging.WARNING,
+    handlers=[
+        logging.FileHandler(".nsss/logs/monitoring.log"),
+        logging.StreamHandler()
+    ]
+)
+```
+
+#### 2. Định kỳ Review Metrics
+
+```bash
+# Dump metrics ra file để phân tích
+from src.core.telemetry.metrics import MetricsCollector
+
+collector = MetricsCollector()
+collector.dump_to_file(".nsss/metrics/summary.json")
+```
+
+**Frequency:**
+- **Hourly:** Check critical alerts
+- **Daily:** Review warning alerts, analyze trends
+- **Weekly:** Generate report, tune thresholds nếu cần
+
+#### 3. Tùy chỉnh Thresholds theo Environment
+
+| Environment | Token Budget | Latency Tolerance | Quality Target |
+|-------------|--------------|-------------------|----------------|
+| **Development** | High (test với sample nhỏ) | High (có thể chậm) | Medium (70% precision OK) |
+| **CI/CD** | Medium (scan PR) | Medium (< 2 min) | High (80%+ precision) |
+| **Production** | Low (chi phí quan trọng) | Low (< 1 min) | Very High (90%+ precision) |
+
+### 2.5. Troubleshooting Threshold Violations
+
+#### Token Usage Exceeded
+
+**Nguyên nhân:**
+- Code file quá lớn (> 1000 LOC)
+- Speculative Expansion quá rộng
+- Nhiều LLM calls cho một file
+
+**Giải pháp:**
+```bash
+# 1. Chia nhỏ file lớn
+# 2. Giảm expansion depth trong config
+# 3. Enable Hierarchical Summarization
+# 4. Sử dụng smaller model cho preliminary scan
+```
+
+#### Latency Exceeded
+
+**Nguyên nhân:**
+- Network latency tới LLM API
+- Model overloaded
+- Complex code graph
+
+**Giải pháp:**
+```bash
+# 1. Sử dụng local LLM (Qwen2.5-Coder-7B)
+# 2. Enable caching (LLM cache + Graph cache)
+# 3. Parallel processing cho multiple files
+# 4. Timeout configuration trong circuit breaker
+```
+
+#### Quality Metrics Degraded
+
+**Nguyên nhân:**
+- Model drift
+- New vulnerability patterns chưa học
+- Feedback loop chưa cập nhật
+
+**Giải pháp:**
+```bash
+# 1. Review feedback data
+nsss ops health  # Check feedback store
+
+# 2. Update Librarian profiles
+# 3. Retrain Risk Ranker với feedback mới
+# 4. Fine-tune LLM nếu cần
+
+# 5. Tạm thời giảm threshold để avoid false alarms
+```
+
+---
 
 ## 3. Các vấn đề Thường gặp và Cách xử lý (Common Issues)
 
