@@ -1,4 +1,6 @@
 from unittest.mock import patch
+import pytest
+from src.core.ai.circuit_breaker import CircuitBreaker
 from src.core.ai.gateway import LLMGatewayService
 from src.core.ai.client import MockAIClient
 
@@ -46,3 +48,20 @@ class TestLLMGatewayService:
         # Verify that the service enforces temperature=0 or similar constraints if applicable
         # This might be hard to test if it's internal to client call, unless we spy on client.
         pass
+
+    def test_analyze_circuit_breaker_blocks_after_failure(self):
+        system_prompt = "Sys"
+        user_prompt = "User"
+        breaker = CircuitBreaker(
+            failure_threshold=1, recovery_timeout_seconds=100.0, time_fn=lambda: 0.0
+        )
+        service = LLMGatewayService(client=self.mock_client, circuit_breaker=breaker)
+
+        with patch.object(
+            self.mock_client, "analyze", side_effect=RuntimeError("fail")
+        ):
+            with pytest.raises(RuntimeError):
+                service.analyze(system_prompt, user_prompt)
+
+        with pytest.raises(RuntimeError, match="Circuit breaker open"):
+            service.analyze(system_prompt, user_prompt)

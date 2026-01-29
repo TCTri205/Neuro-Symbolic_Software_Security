@@ -21,6 +21,17 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: Optional[str] = Field(None, description="OpenAI base URL override")
     GEMINI_BASE_URL: Optional[str] = Field(None, description="Gemini base URL override")
 
+    # Circuit Breaker
+    CIRCUIT_BREAKER_FAILURE_THRESHOLD: int = Field(
+        3, description="Failures before opening the circuit"
+    )
+    CIRCUIT_BREAKER_RECOVERY_TIMEOUT: int = Field(
+        30, description="Seconds before attempting half-open"
+    )
+    CIRCUIT_BREAKER_HALF_OPEN_SUCCESS_THRESHOLD: int = Field(
+        1, description="Successes needed to close from half-open"
+    )
+
     # Multiple API Keys for rotation
     OPENAI_API_KEY_2: Optional[str] = Field(
         None, description="OpenAI API Key (backup 2)"
