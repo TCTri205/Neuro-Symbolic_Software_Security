@@ -30,6 +30,7 @@ from src.core.ai.prompts import SecurityPromptBuilder
 from src.core.scan.semgrep import SemgrepRunner
 from src.core.ai.client import LLMClient
 from src.core.pipeline.gatekeeper import GatekeeperService
+from src.core.persistence import GraphPersistenceService
 from src.librarian import Librarian
 
 DEFAULT_TAINT_SOURCES = [
@@ -276,7 +277,15 @@ class AnalysisOrchestrator:
                         file_path,
                         enable_docstring_stripping=self.enable_docstring_stripping,
                     )
-                    result.ir = parser.parse().model_dump(by_alias=True)
+                    ir_graph = parser.parse()
+                    result.ir = ir_graph.model_dump(by_alias=True)
+                if file_path and file_path != "<unknown>":
+                    try:
+                        GraphPersistenceService.get_instance().save_ir_graph(
+                            ir_graph, file_path
+                        )
+                    except Exception as e:
+                        self.logger.error(f"Graph persistence failed: {e}")
             except Exception as e:
                 msg = f"IR parsing failed: {e}"
                 self.logger.error(msg)
