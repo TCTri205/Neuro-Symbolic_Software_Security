@@ -2,18 +2,23 @@ import os
 import subprocess
 import logging
 from typing import List, Set, Dict, Optional
-from src.core.persistence.graph_serializer import (
-    GraphPersistenceService,
-)
+from src.core.persistence.factory import get_graph_persistence_service
+from src.core.scan.interfaces import GraphProjectPersistencePort, ProcessRunnerPort
 from src.core.parser.ir import IRGraph
 
 logger = logging.getLogger(__name__)
 
 
 class DiffScanner:
-    def __init__(self, project_root: str):
+    def __init__(
+        self,
+        project_root: str,
+        persistence: Optional[GraphProjectPersistencePort] = None,
+        runner: Optional[ProcessRunnerPort] = None,
+    ):
         self.project_root = os.path.abspath(project_root)
-        self.persistence = GraphPersistenceService()
+        self.persistence = persistence or get_graph_persistence_service()
+        self._runner = runner or subprocess.run
 
     def get_changed_files(self, base_ref: str = "origin/main") -> List[str]:
         """
@@ -21,7 +26,7 @@ class DiffScanner:
         """
         try:
             # Check if base_ref exists
-            subprocess.run(
+            self._runner(
                 ["git", "rev-parse", "--verify", base_ref],
                 cwd=self.project_root,
                 check=True,
@@ -30,7 +35,7 @@ class DiffScanner:
 
             # Run diff
             cmd = ["git", "diff", "--name-only", f"{base_ref}...HEAD"]
-            result = subprocess.run(
+            result = self._runner(
                 cmd,
                 cwd=self.project_root,
                 capture_output=True,

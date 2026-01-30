@@ -1,0 +1,13 @@
+from typing import List, Optional, Protocol
+
+from src.report.base import BaseReporter
+
+
+class ReporterRegistryPort(Protocol):
+    def list_report_types(self) -> List[str]: ...
+
+    def get_reporter(self, report_type: str) -> Optional[BaseReporter]: ...
+
+    def get_extension(self, reporter: BaseReporter) -> Optional[str]: ...
+
+    def get_base_name(self, reporter: BaseReporter) -> Optional[str]: ...

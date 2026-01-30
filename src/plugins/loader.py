@@ -4,7 +4,7 @@ import pkgutil
 import logging
 from typing import List
 from src.core.context.loader import ProjectContext
-from src.plugins.base import FrameworkPlugin
+from src.plugins.base import FrameworkPlugin, PipelineEventPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -78,3 +78,49 @@ class PluginLoader:
             except Exception as e:
                 logger.error(f"Error in plugin {plugin.name}.detect(): {e}")
         return active
+
+
+class PipelineEventPluginLoader:
+    def __init__(self) -> None:
+        self.plugins: List[PipelineEventPlugin] = []
+
+    def register(self, plugin: PipelineEventPlugin) -> None:
+        if any(isinstance(existing, plugin.__class__) for existing in self.plugins):
+            return
+        self.plugins.append(plugin)
+
+    def discover(self, package_name: str = "src.plugins") -> None:
+        try:
+            package = importlib.import_module(package_name)
+        except ImportError:
+            logger.warning(
+                f"Could not import package {package_name} for plugin discovery."
+            )
+            return
+
+        if hasattr(package, "__path__"):
+            for _, name, _ in pkgutil.iter_modules(package.__path__):
+                full_name = f"{package_name}.{name}"
+                try:
+                    module = importlib.import_module(full_name)
+                    self._scan_module_for_plugins(module)
+                except Exception as e:
+                    logger.error(f"Failed to load plugin module {full_name}: {e}")
+
+    def _scan_module_for_plugins(self, module) -> None:
+        for _, obj in inspect.getmembers(module):
+            if (
+                inspect.isclass(obj)
+                and issubclass(obj, PipelineEventPlugin)
+                and obj is not PipelineEventPlugin
+                and not inspect.isabstract(obj)
+            ):
+                if not any(isinstance(p, obj) for p in self.plugins):
+                    try:
+                        instance = obj()
+                        self.register(instance)
+                        logger.info(
+                            "Registered pipeline event plugin: %s", instance.name
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to instantiate plugin {obj}: {e}")

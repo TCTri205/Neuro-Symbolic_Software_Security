@@ -2,11 +2,9 @@ import os
 import logging
 from typing import Dict, Any, List, Optional
 from .base import BaseReporter
-from .debug import DebugReporter
-from .markdown import MarkdownReporter
-from .sarif import SarifReporter
-from .ir import IRReporter
 from .graph import GraphTraceExporter
+from .interfaces import ReporterRegistryPort
+from .registry import ReporterRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -16,67 +14,37 @@ class ReportManager:
     Manages the generation of various security reports.
     """
 
-    def __init__(self, output_dir: str, report_types: Optional[List[str]] = None):
+    def __init__(
+        self,
+        output_dir: str,
+        report_types: Optional[List[str]] = None,
+        registry: Optional[ReporterRegistryPort] = None,
+    ):
         self.output_dir = output_dir
-        self._reporter_registry = {
-            "markdown": {
-                "cls": MarkdownReporter,
-                "extension": ".md",
-                "base_name": "nsss_report",
-            },
-            "debug": {
-                "cls": DebugReporter,
-                "extension": ".json",
-                "base_name": "nsss_debug",
-            },
-            "sarif": {
-                "cls": SarifReporter,
-                "extension": ".sarif",
-                "base_name": "nsss_report",
-            },
-            "ir": {
-                "cls": IRReporter,
-                "extension": ".ir.json",
-                "base_name": "nsss_report",
-            },
-            "graph": {
-                "cls": GraphTraceExporter,
-                "extension": ".json",
-                "base_name": "nsss_graph",
-            },
-        }
+        self._registry = registry or ReporterRegistry()
         self.reporters: List[BaseReporter] = self._build_reporters(report_types)
 
     def _build_reporters(self, report_types: Optional[List[str]]) -> List[BaseReporter]:
         if not report_types:
-            selected_types = list(self._reporter_registry.keys())
+            selected_types = list(self._registry.list_report_types())
         else:
             selected_types = [report_type.lower() for report_type in report_types]
 
         reporters: List[BaseReporter] = []
         for report_type in selected_types:
-            registry_entry = self._reporter_registry.get(report_type)
-            if not registry_entry:
+            reporter = self._registry.get_reporter(report_type)
+            if not reporter:
                 logger.warning(f"Unknown report type requested: {report_type}")
                 continue
-            reporter_cls = registry_entry["cls"]
-            reporters.append(reporter_cls())
+            reporters.append(reporter)
 
         return reporters
 
     def _report_extension(self, reporter: BaseReporter) -> Optional[str]:
-        for registry_entry in self._reporter_registry.values():
-            reporter_cls = registry_entry["cls"]
-            if isinstance(reporter, reporter_cls):
-                return registry_entry["extension"]
-        return None
+        return self._registry.get_extension(reporter)
 
     def _report_base_name(self, reporter: BaseReporter) -> Optional[str]:
-        for registry_entry in self._reporter_registry.values():
-            reporter_cls = registry_entry["cls"]
-            if isinstance(reporter, reporter_cls):
-                return registry_entry["base_name"]
-        return None
+        return self._registry.get_base_name(reporter)
 
     def generate_all(
         self, results: Dict[str, Any], metadata: Optional[Dict[str, Any]] = None

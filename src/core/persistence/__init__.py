@@ -15,6 +15,8 @@ from .graph_serializer import (
     compute_project_hash,
     read_git_commit_hash,
 )
+from .factory import get_graph_persistence_service, set_graph_persistence_service
+from .interfaces import GraphPersistenceManagerPort
 
 __all__ = [
     "GRAPH_CACHE_FILENAME",
@@ -32,4 +34,7 @@ __all__ = [
     "compute_file_hash",
     "compute_project_hash",
     "read_git_commit_hash",
+    "get_graph_persistence_service",
+    "set_graph_persistence_service",
+    "GraphPersistenceManagerPort",
 ]

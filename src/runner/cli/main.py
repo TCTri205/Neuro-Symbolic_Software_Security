@@ -333,10 +333,10 @@ def clear_cache(llm_cache: bool, graph_cache: bool, project_root: str) -> None:
 def graph_export(project_root: str, output: str) -> None:
     """Export the persisted IR graph cache to a file."""
     from src.core.persistence.graph_serializer import JsonlGraphSerializer
-    from src.core.persistence import GraphPersistenceService
+    from src.core.persistence import get_graph_persistence_service
 
     root = os.path.abspath(project_root)
-    persistence = GraphPersistenceService.get_instance()
+    persistence = get_graph_persistence_service()
     loaded = persistence.load_project_graph(root, strict=True)
     if not loaded:
         raise click.ClickException("Graph cache not found or stale")
@@ -366,13 +366,13 @@ def graph_export(project_root: str, output: str) -> None:
 def graph_import(project_root: str, input_path: str) -> None:
     """Import a persisted IR graph cache file into this project."""
     from src.core.persistence.graph_serializer import JsonlGraphSerializer
-    from src.core.persistence import GraphPersistenceService
+    from src.core.persistence import get_graph_persistence_service
 
     root = os.path.abspath(project_root)
     serializer = JsonlGraphSerializer()
     graph, _meta = serializer.load(os.path.abspath(input_path))
 
-    persistence = GraphPersistenceService.get_instance()
+    persistence = get_graph_persistence_service()
     saved_count = persistence.save_project_graph(graph, project_root=root)
     click.echo(f"Imported graph cache entries: {saved_count}")
 
