@@ -3,6 +3,9 @@ from .events import (
     register_pipeline_handler,
     get_pipeline_event_registry,
     register_pipeline_plugins,
+    register_plugin,
+    register_plugin_class,
+    discover_plugins,
 )
 from .factory import AnalysisFactory, GraphFactory, PipelineServiceFactory, ScanFactory
 from .orchestrator import AnalysisOrchestrator, AnalysisResult
@@ -18,4 +21,7 @@ __all__ = [
     "register_pipeline_handler",
     "get_pipeline_event_registry",
     "register_pipeline_plugins",
+    "register_plugin",
+    "register_plugin_class",
+    "discover_plugins",
 ]

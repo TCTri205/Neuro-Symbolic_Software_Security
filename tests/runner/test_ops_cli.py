@@ -6,7 +6,7 @@ from click.testing import CliRunner
 from src.core.ai.cache_store import LLMCacheStore
 from src.core.config import settings
 from src.core.parser.ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol
-from src.core.persistence import GraphPersistenceService, get_graph_persistence_service
+from src.core.persistence import get_graph_persistence_service
 from src.core.persistence.graph_serializer import build_cache_dir
 from src.runner.cli.main import cli
 
