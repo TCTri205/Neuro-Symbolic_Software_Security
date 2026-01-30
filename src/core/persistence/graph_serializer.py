@@ -297,6 +297,10 @@ class GraphPersistenceService:
 
     def __init__(self, serializer: Optional[JsonlGraphSerializer] = None) -> None:
         self._serializer = serializer or JsonlGraphSerializer()
+        self._last_project_root: Optional[str] = None
+        self._last_saved_file_path: Optional[str] = None
+        self._last_graph: Optional[IRGraph] = None
+        self._last_graph_meta: Optional[Dict[str, Any]] = None
 
     @classmethod
     def get_instance(cls) -> "GraphPersistenceService":
@@ -312,17 +316,29 @@ class GraphPersistenceService:
         project_root: Optional[str] = None,
     ) -> str:
         root = os.path.abspath(project_root or os.getcwd())
-        cache_path = build_file_cache_path(root, file_path)
-        self._serializer.save(
-            graph,
-            cache_path,
-            metadata={
-                "project_root": root,
-                "commit_hash": read_git_commit_hash(root),
-                "file_path": file_path,
-            },
-        )
-        self._update_manifest(root, file_path, cache_path)
+        if project_root is None and os.path.isabs(file_path):
+            try:
+                rel_path = os.path.relpath(file_path, root)
+                if rel_path.startswith(f"..{os.sep}") or rel_path == "..":
+                    root = os.path.abspath(os.path.dirname(file_path))
+            except ValueError:
+                root = os.path.abspath(os.path.dirname(file_path))
+        resolved_file_path = file_path
+        if not os.path.isabs(file_path):
+            resolved_file_path = os.path.abspath(os.path.join(root, file_path))
+        cache_path = build_file_cache_path(root, resolved_file_path)
+        graph_model = self._serializer._coerce_graph(graph)
+        meta = {
+            "project_root": root,
+            "commit_hash": read_git_commit_hash(root),
+            "file_path": file_path,
+        }
+        self._serializer.save(graph_model, cache_path, metadata=meta)
+        self._last_project_root = root
+        self._last_saved_file_path = resolved_file_path
+        self._last_graph = graph_model
+        self._last_graph_meta = meta
+        self._update_manifest(root, resolved_file_path, cache_path)
         return cache_path
 
     def load_ir_graph_for_file(
@@ -359,17 +375,27 @@ class GraphPersistenceService:
 
         merged = IRGraph()
         for entry in entries.values():
-            entry_path = os.path.abspath(os.path.join(root, entry.file_path))
+            if os.path.isabs(entry.file_path):
+                try:
+                    if os.path.commonpath([root, entry.file_path]) != root:
+                        continue
+                except ValueError:
+                    continue
+                entry_path = entry.file_path
+            else:
+                entry_path = os.path.abspath(os.path.join(root, entry.file_path))
             if not store.is_fresh(entry_path) or not os.path.exists(entry.cache_path):
                 if strict:
                     return None
                 continue
             try:
-                graph, _meta = self._serializer.load(entry.cache_path)
+                graph, meta = self._serializer.load(entry.cache_path)
             except Exception as exc:
                 if strict:
                     logger.warning(f"Failed to load cached graph: {exc}")
                     return None
+                continue
+            if meta.get("project_root") and meta.get("project_root") != root:
                 continue
             self._merge_graphs(merged, graph)
 
@@ -401,6 +427,7 @@ class GraphPersistenceService:
         by_file = self._split_graph_by_file(graph_model)
         for file_path, subgraph in by_file.items():
             self.save_ir_graph(subgraph, file_path, project_root=root)
+        self._last_project_root = root
         return len(by_file)
 
     def _update_manifest(

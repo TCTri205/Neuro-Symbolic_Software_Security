@@ -47,6 +47,7 @@ from src.core.scan.secrets import SecretMatch
 from src.core.scan.semgrep import SemgrepRunner
 from src.core.taint.engine import TaintConfiguration, TaintFlow
 from src.core.telemetry import get_logger
+from src.librarian import Librarian
 
 
 @dataclass
@@ -242,6 +243,7 @@ class AnalysisOrchestrator:
             taint_config=taint_config,
         )
         self.taint_config = build_taint_config(self.config)
+        self.librarian = librarian
         if service_factory is not None:
             factory = service_factory
             self.baseline_engine = factory.build_baseline_engine()
@@ -259,6 +261,10 @@ class AnalysisOrchestrator:
             self.privacy_service = privacy_service or factory.build_privacy_service()
             self.taint_service = taint_service or factory.build_taint_service()
         else:
+            resolved_librarian = librarian
+            if analysis_factory is None and librarian is None:
+                resolved_librarian = Librarian()
+            self.librarian = resolved_librarian
             scan_factory = scan_factory or ScanFactory(
                 self.config,
                 self.logger,
@@ -280,7 +286,7 @@ class AnalysisOrchestrator:
                 self.logger,
                 gatekeeper=gatekeeper,
                 prompt_builder=prompt_builder,
-                librarian=librarian,
+                librarian=resolved_librarian,
                 privacy_masker=privacy_masker,
                 taint_engine=taint_engine,
                 ranker=ranker,

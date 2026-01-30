@@ -18,7 +18,7 @@ class DiffScanner:
     ):
         self.project_root = os.path.abspath(project_root)
         self.persistence = persistence or get_graph_persistence_service()
-        self._runner = runner or subprocess.run
+        self._runner = runner
 
     def get_changed_files(self, base_ref: str = "origin/main") -> List[str]:
         """
@@ -26,7 +26,8 @@ class DiffScanner:
         """
         try:
             # Check if base_ref exists
-            self._runner(
+            runner = self._runner or subprocess.run
+            runner(
                 ["git", "rev-parse", "--verify", base_ref],
                 cwd=self.project_root,
                 check=True,
@@ -35,7 +36,7 @@ class DiffScanner:
 
             # Run diff
             cmd = ["git", "diff", "--name-only", f"{base_ref}...HEAD"]
-            result = self._runner(
+            result = runner(
                 cmd,
                 cwd=self.project_root,
                 capture_output=True,

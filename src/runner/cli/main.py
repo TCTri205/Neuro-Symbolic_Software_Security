@@ -320,7 +320,7 @@ def clear_cache(llm_cache: bool, graph_cache: bool, project_root: str) -> None:
 @ops.command("graph-export")
 @click.option(
     "--project-root",
-    default=".",
+    default=None,
     type=click.Path(exists=True, file_okay=False, dir_okay=True),
     help="Project root used for graph cache lookup.",
 )
@@ -335,8 +335,8 @@ def graph_export(project_root: str, output: str) -> None:
     from src.core.persistence.graph_serializer import JsonlGraphSerializer
     from src.core.persistence import get_graph_persistence_service
 
-    root = os.path.abspath(project_root)
-    persistence = get_graph_persistence_service()
+    root = os.path.abspath(project_root or os.getcwd())
+    persistence = get_graph_persistence_service(root)
     loaded = persistence.load_project_graph(root, strict=True)
     if not loaded:
         raise click.ClickException("Graph cache not found or stale")
@@ -352,7 +352,7 @@ def graph_export(project_root: str, output: str) -> None:
 @ops.command("graph-import")
 @click.option(
     "--project-root",
-    default=".",
+    default=None,
     type=click.Path(exists=True, file_okay=False, dir_okay=True),
     help="Project root used for graph cache lookup.",
 )
@@ -365,14 +365,20 @@ def graph_export(project_root: str, output: str) -> None:
 )
 def graph_import(project_root: str, input_path: str) -> None:
     """Import a persisted IR graph cache file into this project."""
-    from src.core.persistence.graph_serializer import JsonlGraphSerializer
+    from src.core.persistence.graph_serializer import (
+        JsonlGraphSerializer,
+        build_cache_dir,
+    )
     from src.core.persistence import get_graph_persistence_service
 
-    root = os.path.abspath(project_root)
+    root = os.path.abspath(project_root or os.getcwd())
+    cache_dir = build_cache_dir(root)
+    if os.path.exists(cache_dir):
+        shutil.rmtree(cache_dir)
     serializer = JsonlGraphSerializer()
     graph, _meta = serializer.load(os.path.abspath(input_path))
 
-    persistence = get_graph_persistence_service()
+    persistence = get_graph_persistence_service(root)
     saved_count = persistence.save_project_graph(graph, project_root=root)
     click.echo(f"Imported graph cache entries: {saved_count}")
 

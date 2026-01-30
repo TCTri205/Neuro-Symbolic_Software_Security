@@ -6,7 +6,7 @@ from click.testing import CliRunner
 from src.core.ai.cache_store import LLMCacheStore
 from src.core.config import settings
 from src.core.parser.ir import IREdge, IRGraph, IRNode, IRSpan, IRSymbol
-from src.core.persistence import GraphPersistenceService
+from src.core.persistence import GraphPersistenceService, get_graph_persistence_service
 from src.core.persistence.graph_serializer import build_cache_dir
 from src.runner.cli.main import cli
 
@@ -106,18 +106,19 @@ def _sample_graph() -> IRGraph:
 def test_ops_graph_export_import():
     runner = CliRunner()
     with runner.isolated_filesystem():
+        cwd = os.getcwd()
         graph = _sample_graph()
-        sample_path = os.path.join(os.getcwd(), "sample.py")
+        sample_path = os.path.join(cwd, "sample.py")
         with open(sample_path, "w", encoding="utf-8") as handle:
             handle.write("def sample():\n    return 1\n")
-        GraphPersistenceService.get_instance().save_ir_graph(graph, "sample.py")
+        get_graph_persistence_service(cwd).save_ir_graph(graph, "sample.py")
 
         export_path = "exported_graph.jsonl"
         result = runner.invoke(cli, ["ops", "graph-export", "--output", export_path])
         assert result.exit_code == 0
         assert os.path.exists(export_path)
 
-        graph_cache_dir = build_cache_dir(os.getcwd())
+        graph_cache_dir = build_cache_dir(cwd)
         if os.path.exists(graph_cache_dir):
             for entry in os.listdir(graph_cache_dir):
                 os.remove(os.path.join(graph_cache_dir, entry))
@@ -125,7 +126,7 @@ def test_ops_graph_export_import():
         assert result.exit_code == 0
         assert os.path.exists(graph_cache_dir)
 
-        loaded_graph, _ = GraphPersistenceService.get_instance().load_project_graph(
-            os.getcwd(), strict=True
+        loaded_graph, _ = get_graph_persistence_service(cwd).load_project_graph(
+            cwd, strict=True
         )
         assert loaded_graph.model_dump(by_alias=True) == graph.model_dump(by_alias=True)

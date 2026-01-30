@@ -66,7 +66,8 @@ class ScanFactory:
         if self.baseline_engine is not None:
             return self.baseline_engine
         if self.config.baseline_mode:
-            return BaselineEngine()
+            self.baseline_engine = BaselineEngine()
+            return self.baseline_engine
         return None
 
     def build_baseline_service(self) -> Optional[BaselineFilterService]:
