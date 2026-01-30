@@ -14,13 +14,15 @@ from src.core.pipeline.events import (
     get_pipeline_event_registry,
     register_pipeline_plugins,
 )
-from src.core.pipeline.factory import PipelineServiceFactory
+from src.core.pipeline.factory import AnalysisFactory, GraphFactory, ScanFactory
 from src.core.pipeline.interfaces import (
+    AnalysisFactoryPort,
     BaselineEnginePort,
     CFGBuilderPort,
     CallGraphBuilderPort,
     GatekeeperPort,
     GraphBuildPort,
+    GraphFactoryPort,
     GraphPersistencePort,
     IRPort,
     LibrarianPort,
@@ -30,6 +32,7 @@ from src.core.pipeline.interfaces import (
     PrivacyMaskerPort,
     RankerPort,
     RouterPort,
+    ScanFactoryPort,
     SSAPort,
     SecretScannerPort,
     SemgrepRunnerPort,
@@ -37,6 +40,7 @@ from src.core.pipeline.interfaces import (
     SyntheticEdgeBuilderPort,
     TaintEnginePort,
     TaintRoutingPort,
+    PipelineServiceFactoryPort,
 )
 from src.core.risk.schema import RankerOutput, RoutingPlan
 from src.core.scan.secrets import SecretMatch
@@ -198,7 +202,10 @@ class AnalysisOrchestrator:
         baseline_mode: bool = False,
         semgrep_config: Optional[str] = None,
         config: Optional[PipelineConfig] = None,
-        service_factory: Optional[PipelineServiceFactory] = None,
+        service_factory: Optional[PipelineServiceFactoryPort] = None,
+        scan_factory: Optional[ScanFactoryPort] = None,
+        graph_factory: Optional[GraphFactoryPort] = None,
+        analysis_factory: Optional[AnalysisFactoryPort] = None,
         baseline_engine: Optional[BaselineEnginePort] = None,
         gatekeeper: Optional[GatekeeperPort] = None,
         prompt_builder: Optional[PromptBuilderPort] = None,
@@ -235,40 +242,69 @@ class AnalysisOrchestrator:
             taint_config=taint_config,
         )
         self.taint_config = build_taint_config(self.config)
-        factory = service_factory or PipelineServiceFactory(
-            self.config,
-            self.logger,
-            baseline_engine=baseline_engine,
-            gatekeeper=gatekeeper,
-            prompt_builder=prompt_builder,
-            librarian=librarian,
-            secret_scanner=secret_scanner,
-            privacy_masker=privacy_masker,
-            graph_persistence=graph_persistence,
-            semgrep_runner=semgrep_runner,
-            cfg_builder=cfg_builder,
-            call_graph_builder_factory=call_graph_builder_factory,
-            synthetic_builder_factory=synthetic_builder_factory,
-            taint_engine=taint_engine,
-            ranker=ranker,
-            router=router,
-            llm_client_cls=LLMClient,
-            semgrep_runner_cls=SemgrepRunner,
-        )
-        self.baseline_engine = factory.build_baseline_engine()
-        self.baseline_service = factory.build_baseline_service()
-        self.gatekeeper = gatekeeper or factory.build_gatekeeper()
-        self.static_scan_service = (
-            static_scan_service or factory.build_static_scan_service()
-        )
-        self.ir_service = ir_service or factory.build_ir_service()
-        self.graph_build_service = (
-            graph_build_service or factory.build_graph_build_service()
-        )
-        self.ssa_service = ssa_service or factory.build_ssa_service()
-        self.llm_service = llm_service or factory.build_llm_service(self.gatekeeper)
-        self.privacy_service = privacy_service or factory.build_privacy_service()
-        self.taint_service = taint_service or factory.build_taint_service()
+        if service_factory is not None:
+            factory = service_factory
+            self.baseline_engine = factory.build_baseline_engine()
+            self.baseline_service = factory.build_baseline_service()
+            self.gatekeeper = gatekeeper or factory.build_gatekeeper()
+            self.static_scan_service = (
+                static_scan_service or factory.build_static_scan_service()
+            )
+            self.ir_service = ir_service or factory.build_ir_service()
+            self.graph_build_service = (
+                graph_build_service or factory.build_graph_build_service()
+            )
+            self.ssa_service = ssa_service or factory.build_ssa_service()
+            self.llm_service = llm_service or factory.build_llm_service(self.gatekeeper)
+            self.privacy_service = privacy_service or factory.build_privacy_service()
+            self.taint_service = taint_service or factory.build_taint_service()
+        else:
+            scan_factory = scan_factory or ScanFactory(
+                self.config,
+                self.logger,
+                baseline_engine=baseline_engine,
+                secret_scanner=secret_scanner,
+                semgrep_runner=semgrep_runner,
+                semgrep_runner_cls=SemgrepRunner,
+            )
+            graph_factory = graph_factory or GraphFactory(
+                self.config,
+                self.logger,
+                graph_persistence=graph_persistence,
+                cfg_builder=cfg_builder,
+                call_graph_builder_factory=call_graph_builder_factory,
+                synthetic_builder_factory=synthetic_builder_factory,
+            )
+            analysis_factory = analysis_factory or AnalysisFactory(
+                self.config,
+                self.logger,
+                gatekeeper=gatekeeper,
+                prompt_builder=prompt_builder,
+                librarian=librarian,
+                privacy_masker=privacy_masker,
+                taint_engine=taint_engine,
+                ranker=ranker,
+                router=router,
+                llm_client_cls=LLMClient,
+            )
+            self.baseline_engine = scan_factory.build_baseline_engine()
+            self.baseline_service = scan_factory.build_baseline_service()
+            self.gatekeeper = gatekeeper or analysis_factory.build_gatekeeper()
+            self.static_scan_service = (
+                static_scan_service or scan_factory.build_static_scan_service()
+            )
+            self.ir_service = ir_service or graph_factory.build_ir_service()
+            self.graph_build_service = (
+                graph_build_service or graph_factory.build_graph_build_service()
+            )
+            self.ssa_service = ssa_service or graph_factory.build_ssa_service()
+            self.llm_service = llm_service or analysis_factory.build_llm_service(
+                self.gatekeeper
+            )
+            self.privacy_service = (
+                privacy_service or analysis_factory.build_privacy_service()
+            )
+            self.taint_service = taint_service or analysis_factory.build_taint_service()
         self.event_registry = event_registry
 
     def _build_event_bus(self) -> EventBus:
