@@ -1,0 +1,25 @@
+# .pre-commit-config.yaml - Optimized for Low-Spec Laptops
+# Install: pip install pre-commit
+# Enable: pre-commit install
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=500']
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.11
+    hooks:
+      # Run the linter.
+      - id: ruff
+        args: [ --fix ]
+      # Run the formatter.
+      - id: ruff-format
+
+# Note: We intentionally DO NOT include heavy scans (like full NSSS scan) here
+# to prevent laptop freezing. Heavy scans are delegated to GitHub Actions.

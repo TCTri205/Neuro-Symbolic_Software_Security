@@ -1,0 +1,41 @@
+name: NSSS Scan (Lite)
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  scan_lite:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+
+    - name: Install dependencies (minimal)
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+    - name: Run NSSS scan (fast)
+      env:
+        PYTHONPATH: ${{ github.workspace }}
+        OPENAI_API_KEY: "dummy_key_for_ci"
+        ANTHROPIC_API_KEY: "dummy_key_for_ci"
+      run: |
+        make scan-fast
+
+    - name: Upload SARIF file
+      uses: github/codeql-action/upload-sarif@v3
+      if: always()
+      with:
+        sarif_file: nsss_report.sarif
