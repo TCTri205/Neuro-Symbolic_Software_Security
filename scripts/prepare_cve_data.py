@@ -117,10 +117,12 @@ def prepare_data(output_path: Path, limit: int = 5000):
                 f"   Scanned {checked} files... (Found {count} vulnerable examples)"
             )
 
-        # 1. Filter by Language - the-stack-smol has 'lang' column
-        lang = row.get("lang", "")
-        if not lang or lang.lower() != "python":
-            continue
+        # 1. Filter by Language (Only for multi-language datasets like 'the-stack')
+        # 'codeparrot' datasets are Python-only by definition, so we skip this check for them.
+        if "codeparrot" not in dataset_name:
+            lang = row.get("lang", "") or row.get("language", "")
+            if not lang or lang.lower() != "python":
+                continue
 
         # 2. Get Code Content
         code = row.get("content", "")
