@@ -24,6 +24,9 @@ from src.core.telemetry import get_logger  # noqa: E402
 logger = get_logger(__name__)
 
 
+import os
+
+
 def prepare_data(output_path: Path, limit: int = 5000):
     """
     Downloads and processes CVEFixes dataset.
@@ -36,14 +39,22 @@ def prepare_data(output_path: Path, limit: int = 5000):
         )
         sys.exit(1)
 
-    logger.info("⬇️ Downloading 'joshbressers/cve_fixes' dataset from HuggingFace...")
-    # Using joshbressers/cve_fixes as the base source
+    hf_token = os.getenv("HF_TOKEN")
+    dataset_name = "S2K/cve_fixes"
+
+    logger.info(f"⬇️ Downloading '{dataset_name}' dataset from HuggingFace...")
     try:
         # Load stream=True to avoid downloading the whole thing if we just need a subset
-        dataset = load_dataset("joshbressers/cve_fixes", split="train", streaming=True)
+        dataset = load_dataset(
+            dataset_name, split="train", streaming=True, token=hf_token
+        )
     except Exception as e:
-        logger.error(f"❌ Failed to download dataset: {e}")
-        return
+        logger.error(f"❌ Failed to download dataset '{dataset_name}': {e}")
+        if not hf_token:
+            logger.error(
+                "💡 Hint: This dataset is Gated. Ensure you have set your HF_TOKEN."
+            )
+        sys.exit(1)
 
     registry = FewShotRegistry(storage_path=output_path)
     count = 0
