@@ -94,23 +94,55 @@ def main():
 
     args = parser.parse_args()
 
+    import time
+    from datetime import datetime
+
+    print("\n" + "=" * 60, flush=True)
+    print(f"🚀 EVALUATION START - {datetime.now().strftime('%H:%M:%S')}", flush=True)
+    print("=" * 60, flush=True)
+    print(f"Provider: {args.provider}", flush=True)
+    print(f"Model: {args.model}", flush=True)
+    print(f"Registry: {args.registry}", flush=True)
+    if args.limit:
+        print(f"Sample Limit: {args.limit}", flush=True)
+    print("=" * 60 + "\n", flush=True)
+
     # 1. Setup Client
+    print(f"📦 Step 1/4: Initializing {args.provider} client...", flush=True)
+    start_step = time.time()
     logger.info(f"Initializing client for provider: {args.provider}")
     client = AIClientFactory.get_client(provider=args.provider, model=args.model)
+    print(f"   ✅ Client initialized in {time.time()-start_step:.1f}s\n", flush=True)
 
     if args.provider == "local":
+        print(f"📥 Step 2/4: Loading local model from {args.model}...", flush=True)
+        print(
+            "   ⏳ This may take 2-5 minutes (downloading + loading 7B model)...",
+            flush=True,
+        )
+        start_step = time.time()
         logger.info(f"Loading local model from {args.model}...")
         try:
             client.load_model()
+            print(
+                f"   ✅ Model loaded successfully in {time.time()-start_step:.1f}s\n",
+                flush=True,
+            )
         except ImportError as e:
             logger.error(f"Failed to load local model: {e}")
             logger.error("Ensure unsloth is installed if using 'local' provider.")
+            print(f"   ❌ Model load failed: {e}", flush=True)
             return 1
         except Exception as e:
             logger.error(f"Error loading model: {e}")
+            print(f"   ❌ Model load failed: {e}", flush=True)
             return 1
+    else:
+        print("📥 Step 2/4: Remote provider - skipping model load\n", flush=True)
 
     # 2. Load Data
+    print("📊 Step 3/4: Loading validation data...", flush=True)
+    start_step = time.time()
     examples = load_validation_data(args.registry)
 
     if args.limit and args.limit > 0:
@@ -118,12 +150,31 @@ def main():
         examples = examples[: args.limit]
 
     logger.info(f"Loaded {len(examples)} examples for evaluation.")
+    print(
+        f"   ✅ Loaded {len(examples)} examples in {time.time()-start_step:.1f}s\n",
+        flush=True,
+    )
 
     # 3. Run Evaluation
+    print("🔬 Step 4/4: Running evaluation...", flush=True)
+    print(f"   📌 Total samples: {len(examples)}", flush=True)
+    if len(examples) > 0:
+        avg_estimate = 15  # seconds per sample (conservative estimate)
+        estimated_time = (len(examples) * avg_estimate) / 60
+        print(
+            f"   ⏱️  Estimated time: ~{estimated_time:.1f} minutes ({avg_estimate}s/sample)",
+            flush=True,
+        )
+    print("", flush=True)
+
+    start_eval = time.time()
     harness = EvaluationHarness(llm_client=client)
     logger.info("Starting evaluation batch...")
 
     metrics = harness.evaluate_batch(examples)
+
+    eval_time = time.time() - start_eval
+    print(f"\n   ⏱️  Total evaluation time: {eval_time/60:.2f} minutes", flush=True)
 
     # 4. Report Results
     print("\n" + "=" * 40)

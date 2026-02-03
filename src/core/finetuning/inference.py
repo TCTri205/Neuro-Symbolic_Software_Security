@@ -49,20 +49,32 @@ class InferenceEngine:
             )
 
         logger.info(f"Loading model from {self.model_path}...")
+        print(f"   🔄 Downloading/Loading model: {self.model_path}", flush=True)
+        print("   ⏳ First-time download may take 3-5 minutes...", flush=True)
+
         try:
+            import time
+
+            start = time.time()
+
             self.model, self.tokenizer = FastLanguageModel.from_pretrained(
                 model_name=self.model_path,
                 max_seq_length=4096,
                 dtype=None,
                 load_in_4bit=True,
             )
+
+            load_time = time.time() - start
+            print(f"   ✅ Model loaded in {load_time:.1f}s", flush=True)
+
             # Optimize tokenizer
             self.tokenizer.padding_side = "left"
 
             FastLanguageModel.for_inference(self.model)
-            logger.info("Model loaded successfully.")
+            logger.info(f"Model loaded successfully in {load_time:.1f}s")
         except Exception as e:
             logger.error(f"Failed to load model: {e}")
+            print(f"   ❌ Model load error: {e}", flush=True)
             raise
 
     def generate(self, prompt: str) -> str:
@@ -98,7 +110,8 @@ class InferenceEngine:
 
         finally:
             # Memory Cleanup
-            del inputs
+            if "inputs" in locals():
+                del inputs
             if "outputs" in locals():
                 del outputs
             torch.cuda.empty_cache()

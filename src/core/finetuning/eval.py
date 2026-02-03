@@ -6,7 +6,7 @@ from src.core.finetuning.data_factory import TrainingExample
 from src.core.ai.cot import extract_cot
 
 try:
-    from tqdm import tqdm
+    from tqdm.auto import tqdm  # auto selects best UI (notebook vs terminal)
 except ImportError:
     # Fallback if tqdm is not installed
     def tqdm(iterable, desc="", **kwargs):
@@ -39,6 +39,8 @@ class EvaluationHarness:
         """
         Runs evaluation on a batch of examples.
         """
+        import time
+
         valid_json_count = 0
         correct_predictions = 0
 
@@ -52,7 +54,29 @@ class EvaluationHarness:
         if total == 0:
             return EvaluationMetrics(0, 0.0, 0.0, 0.0, 0.0)
 
-        for example in tqdm(examples, desc="Evaluating", unit="sample"):
+        logger.info(f"Starting evaluation of {total} examples...")
+        print(f"🔄 Processing {total} samples...", flush=True)
+
+        # Progress tracking
+        start_time = time.time()
+        log_interval = max(1, total // 20)  # Log every 5% progress
+
+        for idx, example in enumerate(
+            tqdm(examples, desc="Evaluating", unit="sample"), 1
+        ):
+            # Log progress every N samples
+            if idx % log_interval == 0 or idx == 1:
+                elapsed = time.time() - start_time
+                avg_time = elapsed / idx
+                remaining = (total - idx) * avg_time
+                print(
+                    f"   [{idx}/{total}] {idx/total*100:.1f}% | "
+                    f"Elapsed: {elapsed/60:.1f}m | "
+                    f"ETA: {remaining/60:.1f}m | "
+                    f"Avg: {avg_time:.1f}s/sample",
+                    flush=True,
+                )
+
             # 1. Use client.analyze interface which handles formatting
             try:
                 # Some clients might return a dict with "content"
@@ -61,7 +85,8 @@ class EvaluationHarness:
                     # Fallback if client returns full dict instead of string
                     response = response.get("content", "")
             except Exception as e:
-                logger.error(f"Generation failed: {e}")
+                logger.error(f"Generation failed at sample {idx}: {e}")
+                print(f"   ⚠️ Sample {idx} failed: {e}", flush=True)
                 # Treat as invalid
                 continue
 
@@ -114,6 +139,10 @@ class EvaluationHarness:
         # FNR = FN / (FN + TP)
         positives = fn + tp
         fnr = fn / positives if positives > 0 else 0.0
+
+        total_time = time.time() - start_time
+        print(f"\n✅ Evaluation completed in {total_time/60:.1f} minutes", flush=True)
+        logger.info(f"Evaluation completed. Total time: {total_time:.1f}s")
 
         return EvaluationMetrics(
             total_samples=total,
