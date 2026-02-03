@@ -42,22 +42,44 @@ def prepare_data(output_path: Path, limit: int = 5000):
         )
         sys.exit(1)
 
-    # Use bigcode/the-stack-smol - a static JSON dataset that doesn't require loading scripts
-    # This is a 10GB subset of The Stack containing real GitHub code
-    dataset_name = "bigcode/the-stack-smol"
+    hf_token = os.getenv("HF_TOKEN")
 
-    try:
-        logger.info(f"⬇️ Loading '{dataset_name}' from HuggingFace...")
-        # This dataset uses JSON format, no loading scripts needed
-        # We load only a subset to avoid memory issues
-        dataset = load_dataset(
-            dataset_name,
-            split="train",
-            streaming=True,  # Stream to handle large dataset
-        )
-    except Exception as e:
-        logger.error(f"❌ Failed to load '{dataset_name}': {e}")
-        logger.error("💡 Please check your internet connection and try again.")
+    # List of datasets to try (in order of preference)
+    # 1. bigcode/the-stack-smol: High quality, requires auth (Gated)
+    # 2. codeparrot/codeparrot-clean: Good quality Python code, usually public/easier access
+    dataset_candidates = [
+        "bigcode/the-stack-smol",
+        "codeparrot/codeparrot-clean",
+    ]
+
+    dataset = None
+    dataset_name = ""
+
+    for candidate in dataset_candidates:
+        try:
+            logger.info(f"⬇️ Attempting to load '{candidate}' from HuggingFace...")
+            # Streaming is crucial for these large datasets
+            dataset = load_dataset(
+                candidate,
+                split="train",
+                streaming=True,
+                token=hf_token,
+                trust_remote_code=True,  # Some datasets might need this
+            )
+            dataset_name = candidate
+            logger.info(f"✅ Successfully connected to '{candidate}'")
+            break
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load '{candidate}': {e}")
+            if "gated" in str(e).lower() and not hf_token:
+                logger.warning(
+                    "   (This dataset requires an HF_TOKEN. Check your notebook settings)"
+                )
+            continue
+
+    if dataset is None:
+        logger.error("❌ Failed to load any candidate datasets.")
+        logger.error("💡 Please check your HF_TOKEN and internet connection.")
         sys.exit(1)
 
     registry = FewShotRegistry(storage_path=output_path)
