@@ -5,6 +5,15 @@ from src.core.telemetry import get_logger
 from src.core.finetuning.data_factory import TrainingExample
 from src.core.ai.cot import extract_cot
 
+try:
+    from tqdm import tqdm
+except ImportError:
+    # Fallback if tqdm is not installed
+    def tqdm(iterable, desc="", **kwargs):
+        print(f"Start processing: {desc}")
+        return iterable
+
+
 logger = get_logger(__name__)
 
 
@@ -43,7 +52,7 @@ class EvaluationHarness:
         if total == 0:
             return EvaluationMetrics(0, 0.0, 0.0, 0.0, 0.0)
 
-        for example in examples:
+        for example in tqdm(examples, desc="Evaluating", unit="sample"):
             # 1. Use client.analyze interface which handles formatting
             try:
                 # Some clients might return a dict with "content"

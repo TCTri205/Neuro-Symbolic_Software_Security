@@ -88,6 +88,9 @@ def main():
         help="Path to local model or model name",
     )
     parser.add_argument("--registry", type=Path, help="Path to registry file")
+    parser.add_argument(
+        "--limit", type=int, default=None, help="Limit number of samples for evaluation"
+    )
 
     args = parser.parse_args()
 
@@ -109,6 +112,11 @@ def main():
 
     # 2. Load Data
     examples = load_validation_data(args.registry)
+
+    if args.limit and args.limit > 0:
+        logger.info(f"Limiting evaluation to first {args.limit} examples.")
+        examples = examples[: args.limit]
+
     logger.info(f"Loaded {len(examples)} examples for evaluation.")
 
     # 3. Run Evaluation
