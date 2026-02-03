@@ -14,7 +14,7 @@ class LocalLLMClient(AIClient):
     Supports automatic fallback to Base Model if fine-tuned model is missing.
     """
 
-    def __init__(self, model_path: str = None):
+    def __init__(self, model: str = None):
         # 1. Determine model path priority:
         #    a) Constructor arg (if provided)
         #    b) Env var 'LOCAL_MODEL_PATH'
@@ -24,8 +24,8 @@ class LocalLLMClient(AIClient):
         default_ft_path = "outputs/qwen-security-model"
         base_model_name = "Qwen/Qwen2.5-Coder-7B-Instruct"
 
-        if model_path:
-            target_path = model_path
+        if model:
+            target_path = model
         else:
             target_path = os.getenv("LOCAL_MODEL_PATH", default_ft_path)
 

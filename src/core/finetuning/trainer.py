@@ -1,23 +1,34 @@
 import json
+import logging
+import torch
 from src.core.telemetry import get_logger
 
 logger = get_logger(__name__)
 
+# Try importing Unsloth + training stack, but handle GPU-less environments gracefully.
+# On CPU-only runtimes, Unsloth raises NotImplementedError at import time. We treat
+# any import-time failure as "training stack unavailable" and surface a clear error
+# when Finetuner.train() is called.
 try:
-    from unsloth import FastLanguageModel, is_bfloat16_supported
-    from trl import SFTTrainer
-    from transformers import TrainingArguments
-    from datasets import load_dataset
-except ImportError:
+    from unsloth import FastLanguageModel, is_bfloat16_supported  # type: ignore[import]
+    from trl import SFTTrainer  # type: ignore[import]
+    from transformers import TrainingArguments  # type: ignore[import]
+    from datasets import load_dataset  # type: ignore[import]
+except Exception as exc:  # ImportError, NotImplementedError, etc.
     FastLanguageModel = None
     SFTTrainer = None
     TrainingArguments = None
     load_dataset = None
 
-    def is_bfloat16_supported():
+    def is_bfloat16_supported() -> bool:
         return False
 
-    logger.warning("Unsloth/TRL not installed. Training will fail if attempted.")
+    # Use root logger to ensure message is visible even if telemetry logger is not configured yet.
+    logging.getLogger(__name__).warning(
+        "Unsloth/TRL training stack is not available. "
+        "Fine-tuning with Finetuner will fail if attempted. "
+        f"Details: {exc}"
+    )
 
 
 class Finetuner:
@@ -26,7 +37,19 @@ class Finetuner:
 
     def train(self, dataset_path: str, output_dir: str):
         if not FastLanguageModel:
-            raise ImportError("Unsloth is required for training.")
+            raise ImportError(
+                "Unsloth is required for training, but it is not available. "
+                "This usually means Unsloth or its dependencies are not installed, "
+                "or no compatible GPU is present. "
+                "On Colab, enable a GPU runtime and re-run the install cell."
+            )
+
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                "CUDA GPU is required for Unsloth-based training, but "
+                "torch.cuda.is_available() is False. "
+                "On Colab, go to Runtime → Change runtime type → select a GPU."
+            )
 
         # 1. Load Model
         model, tokenizer = FastLanguageModel.from_pretrained(
