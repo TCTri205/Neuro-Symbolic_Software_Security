@@ -41,116 +41,92 @@ def prepare_data(output_path: Path, limit: int = 5000):
 
     hf_token = os.getenv("HF_TOKEN")
 
-    # Try multiple dataset sources in order of preference
-    dataset_sources = [
-        "diversevul/diversevul",  # Public vulnerability detection dataset
-        "bigcode/the-stack-smol",  # Backup: general code dataset (large)
-    ]
+    # Use bigcode/commitpackft as the primary source for real-world fixes
+    # This dataset is Public, huge, and multi-language. We will filter for Python fixes.
+    dataset_name = "bigcode/commitpackft"
 
-    dataset = None
-    dataset_name = None
-
-    for source in dataset_sources:
-        try:
-            logger.info(f"⬇️ Attempting to download '{source}' from HuggingFace...")
-            dataset = load_dataset(
-                source, split="train", streaming=True, token=hf_token
-            )
-            dataset_name = source
-            logger.info(f"✅ Successfully loaded dataset: {source}")
-            break
-        except Exception as e:
-            logger.warning(f"⚠️ Failed to load '{source}': {e}")
-            continue
-
-    if dataset is None:
-        logger.error("❌ Failed to download any available dataset.")
-        logger.error("💡 Tried sources: " + ", ".join(dataset_sources))
+    try:
+        logger.info(f"⬇️ Streaming '{dataset_name}' from HuggingFace...")
+        # Streaming is crucial here because the dataset is 1TB+
+        dataset = load_dataset(
+            dataset_name, split="train", streaming=True, token=hf_token
+        )
+    except Exception as e:
+        logger.error(f"❌ Failed to load '{dataset_name}': {e}")
         if not hf_token:
             logger.error(
-                "💡 Some datasets may be Gated. Set HF_TOKEN if you have access."
+                "💡 Hint: Ensure you have internet access. HF_TOKEN is optional for this public dataset."
             )
         sys.exit(1)
 
     registry = FewShotRegistry(storage_path=output_path)
     count = 0
     skipped = 0
+    checked = 0
 
-    logger.info(
-        f"🔄 Processing dataset '{dataset_name}' and filtering for Python vulnerabilities..."
-    )
+    logger.info(f"🔄 Filtering '{dataset_name}' for Python Security Fixes...")
+    logger.info("   Keywords: cve, security, vuln, fix, patch")
+
+    # Security keywords to filter commit messages
+    keywords = ["cve", "security", "vuln", "fix", "patch", "close", "resolve"]
 
     for row in dataset:
         if count >= limit:
             break
 
-        # Handle different dataset schemas
-        if dataset_name == "diversevul/diversevul":
-            # DiverseVul schema: func (code), target (0=safe, 1=vulnerable), cwe (CWE-ID)
-            code = row.get("func", "")
-            is_vulnerable = row.get("target", 0) == 1
-            cwe_id = row.get("cwe", "Unknown-CWE")
+        checked += 1
+        if checked % 1000 == 0:
+            logger.info(f"   Scanned {checked} commits... (Found {count} examples)")
 
-            # Skip non-vulnerable or invalid entries
-            if not is_vulnerable or not code or len(code) > 4096:
-                skipped += 1
-                continue
-
-            # For vulnerabilities, create a "before fix" example
-            # Since we don't have the fixed version, we'll use this for detection training
-            registry.add_positive_example(
-                code=code,
-                vuln_type="Security Vulnerability",
-                reasoning=f"Code contains vulnerability (CWE: {cwe_id})",
-                source=f"DiverseVul-{cwe_id}",
-            )
-
-        elif dataset_name == "bigcode/the-stack-smol":
-            # The Stack schema: content (code), language
-            # Filter for Python and create examples
-            lang = row.get("lang", "")
-            if lang.lower() != "python":
-                continue
-
-            code = row.get("content", "")
-            if not code or len(code) > 4096:
-                skipped += 1
-                continue
-
-            # Since this is general code, we'll use it as safe examples
-            # Skip for now as we want vulnerability data
+        # 1. Filter by Language
+        lang = row.get("lang", "") or row.get("language", "")
+        if not lang or lang.lower() != "python":
             continue
 
-        else:
-            # Unknown schema - try generic approach
-            filename = row.get("filename", "")
-            if not filename.endswith(".py"):
-                continue
+        # 2. Filter by Message (Heuristic for Fixes)
+        message = row.get("message", "").lower()
+        if not any(k in message for k in keywords):
+            continue
 
-            code_before = row.get("old_code", row.get("code_before", ""))
-            code_after = row.get("new_code", row.get("code_after", ""))
+        # 3. Get Code
+        code_before = row.get("old_contents", "")
+        code_after = row.get("new_contents", "")
 
-            if not code_before or not code_after or len(code_before) > 4096:
-                skipped += 1
-                continue
+        # Validate content
+        if not code_before or not code_after:
+            continue
 
-            cve_id = row.get("cve_id", row.get("id", "Unknown-CVE"))
+        if len(code_before) > 4096 or len(code_after) > 4096:
+            # Skip too long files to fit in context
+            skipped += 1
+            continue
 
-            registry.add_fix_example(
-                code_before=code_before,
-                code_after=code_after,
-                vuln_type="Security Vulnerability",
-                source=cve_id,
-            )
+        # Basic diff check (avoid identical files)
+        if code_before == code_after:
+            continue
+
+        # Create Example
+        # Try to extract CVE ID if present
+        import re
+
+        cve_match = re.search(r"cve-\d{4}-\d+", message)
+        source_id = cve_match.group(0).upper() if cve_match else "Real-World-Fix"
+
+        registry.add_fix_example(
+            code_before=code_before,
+            code_after=code_after,
+            vuln_type="Potential Security Vulnerability"
+            if "security" in message or "cve" in message
+            else "Bug Fix",
+            source=source_id,
+        )
 
         count += 1
 
-        if count % 100 == 0:
-            logger.info(f"   Collected {count} examples...")
-
     logger.info("✅ Processing complete.")
     logger.info(f"   Total Examples: {count}")
-    logger.info(f"   Skipped/Filtered: {skipped}")
+    logger.info(f"   Scanned: {checked}")
+    logger.info(f"   Skipped (Length/Duplicate): {skipped}")
 
     registry.save()
 
