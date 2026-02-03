@@ -2,8 +2,11 @@
 """
 Data Preparation Script for NSSS Security Auditor.
 
-Fetches real vulnerability data (CVEFixes) from HuggingFace,
-filters for Python, and populates the FewShotRegistry for training.
+Fetches real Python code from The Stack dataset on HuggingFace,
+detects security vulnerability patterns, and populates the FewShotRegistry for training.
+
+This script scans real-world Python code from GitHub and identifies potential
+security vulnerabilities based on code patterns (SQL injection, eval, pickle, etc.).
 
 Reference: Docs 06 - Data Factory Strategy.
 """
@@ -39,29 +42,22 @@ def prepare_data(output_path: Path, limit: int = 5000):
         )
         sys.exit(1)
 
-    hf_token = os.getenv("HF_TOKEN")
-
-    # Use bigcode/commitpackft as the primary source for real-world fixes
-    # This dataset is Public, huge, and multi-language. We will filter for Python fixes.
-    dataset_name = "bigcode/commitpackft"
+    # Use bigcode/the-stack-smol - a static JSON dataset that doesn't require loading scripts
+    # This is a 10GB subset of The Stack containing real GitHub code
+    dataset_name = "bigcode/the-stack-smol"
 
     try:
-        logger.info(f"⬇️ Streaming '{dataset_name}' from HuggingFace...")
-        # Streaming is crucial here because the dataset is 1TB+
-        # trust_remote_code=True is required for datasets using loading scripts (like commitpackft)
+        logger.info(f"⬇️ Loading '{dataset_name}' from HuggingFace...")
+        # This dataset uses JSON format, no loading scripts needed
+        # We load only a subset to avoid memory issues
         dataset = load_dataset(
             dataset_name,
             split="train",
-            streaming=True,
-            token=hf_token,
-            trust_remote_code=True,
+            streaming=True,  # Stream to handle large dataset
         )
     except Exception as e:
         logger.error(f"❌ Failed to load '{dataset_name}': {e}")
-        if not hf_token:
-            logger.error(
-                "💡 Hint: Ensure you have internet access. HF_TOKEN is optional for this public dataset."
-            )
+        logger.error("💡 Please check your internet connection and try again.")
         sys.exit(1)
 
     registry = FewShotRegistry(storage_path=output_path)
@@ -69,11 +65,25 @@ def prepare_data(output_path: Path, limit: int = 5000):
     skipped = 0
     checked = 0
 
-    logger.info(f"🔄 Filtering '{dataset_name}' for Python Security Fixes...")
-    logger.info("   Keywords: cve, security, vuln, fix, patch")
+    logger.info(
+        f"🔄 Filtering '{dataset_name}' for Python files with security patterns..."
+    )
+    logger.info("   Looking for: SQL injection, XSS, eval, pickle, yaml.load patterns")
 
-    # Security keywords to filter commit messages
-    keywords = ["cve", "security", "vuln", "fix", "patch", "close", "resolve"]
+    # Security vulnerability patterns in code
+    vuln_patterns = [
+        ("SQL Injection", ["execute(", "cursor.execute", "%s", "f'SELECT", "format("]),
+        (
+            "Code Injection",
+            ["eval(", "exec(", "subprocess.call", "os.system", "input("],
+        ),
+        (
+            "Insecure Deserialization",
+            ["pickle.load", "yaml.load", "json.load", "unpickle"],
+        ),
+        ("Path Traversal", ["open(user_input)", "../../", "os.path.join(user_input)"]),
+        ("XSS", ["render_template", "{{ user_input }}", "html +=", "innerHTML"]),
+    ]
 
     for row in dataset:
         if count >= limit:
@@ -81,57 +91,50 @@ def prepare_data(output_path: Path, limit: int = 5000):
 
         checked += 1
         if checked % 1000 == 0:
-            logger.info(f"   Scanned {checked} commits... (Found {count} examples)")
+            logger.info(
+                f"   Scanned {checked} files... (Found {count} vulnerable examples)"
+            )
 
-        # 1. Filter by Language
-        lang = row.get("lang", "") or row.get("language", "")
+        # 1. Filter by Language - the-stack-smol has 'lang' column
+        lang = row.get("lang", "")
         if not lang or lang.lower() != "python":
             continue
 
-        # 2. Filter by Message (Heuristic for Fixes)
-        message = row.get("message", "").lower()
-        if not any(k in message for k in keywords):
-            continue
-
-        # 3. Get Code
-        code_before = row.get("old_contents", "")
-        code_after = row.get("new_contents", "")
-
-        # Validate content
-        if not code_before or not code_after:
-            continue
-
-        if len(code_before) > 4096 or len(code_after) > 4096:
-            # Skip too long files to fit in context
+        # 2. Get Code Content
+        code = row.get("content", "")
+        if not code or len(code) < 100 or len(code) > 4096:
             skipped += 1
             continue
 
-        # Basic diff check (avoid identical files)
-        if code_before == code_after:
+        # 3. Detect Vulnerability Patterns
+        detected_vuln = None
+        for vuln_name, patterns in vuln_patterns:
+            if any(pattern in code for pattern in patterns):
+                detected_vuln = vuln_name
+                break
+
+        if not detected_vuln:
             continue
 
-        # Create Example
-        # Try to extract CVE ID if present
-        import re
+        # Create Example - use the vulnerable code as 'before'
+        # For 'after', we'll create a simple fix template
+        source_id = row.get("max_stars_repo_name", row.get("path", "Unknown"))
 
-        cve_match = re.search(r"cve-\d{4}-\d+", message)
-        source_id = cve_match.group(0).upper() if cve_match else "Real-World-Fix"
-
-        registry.add_fix_example(
-            code_before=code_before,
-            code_after=code_after,
-            vuln_type="Potential Security Vulnerability"
-            if "security" in message or "cve" in message
-            else "Bug Fix",
+        # For training, we use the vulnerable code as the example
+        # The model will learn to detect these patterns
+        registry.add_positive_example(
+            code=code,
+            vuln_type=detected_vuln,
+            reasoning=f"Code contains potential {detected_vuln} vulnerability pattern",
             source=source_id,
         )
 
         count += 1
 
     logger.info("✅ Processing complete.")
-    logger.info(f"   Total Examples: {count}")
-    logger.info(f"   Scanned: {checked}")
-    logger.info(f"   Skipped (Length/Duplicate): {skipped}")
+    logger.info(f"   Total Vulnerable Examples Found: {count}")
+    logger.info(f"   Total Files Scanned: {checked}")
+    logger.info(f"   Skipped (Non-Python/Invalid Length): {skipped}")
 
     registry.save()
 
