@@ -48,8 +48,13 @@ def prepare_data(output_path: Path, limit: int = 5000):
     try:
         logger.info(f"⬇️ Streaming '{dataset_name}' from HuggingFace...")
         # Streaming is crucial here because the dataset is 1TB+
+        # trust_remote_code=True is required for datasets using loading scripts (like commitpackft)
         dataset = load_dataset(
-            dataset_name, split="train", streaming=True, token=hf_token
+            dataset_name,
+            split="train",
+            streaming=True,
+            token=hf_token,
+            trust_remote_code=True,
         )
     except Exception as e:
         logger.error(f"❌ Failed to load '{dataset_name}': {e}")
