@@ -12,7 +12,13 @@ Usage:
 import argparse
 import json
 import tempfile
+import sys
 from pathlib import Path
+
+# Ensure src is in path
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 from src.core.finetuning.few_shot_registry import FewShotRegistry
 from src.core.finetuning.trainer import Finetuner

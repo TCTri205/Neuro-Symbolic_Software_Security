@@ -15,11 +15,11 @@ requests>=2.31.0
 semgrep>=1.50.0
 
 # AI/LLM & Training
-torch>=2.1.0
-transformers>=4.35.0
-accelerate>=0.25.0
-peft>=0.7.0
-bitsandbytes>=0.41.0
+# torch>=2.1.0  <-- Handled by Unsloth
+# transformers>=4.35.0 <-- Handled by Unsloth
+# accelerate>=0.25.0 <-- Handled by Unsloth
+# peft>=0.7.0 <-- Handled by Unsloth
+# bitsandbytes>=0.41.0 <-- Handled by Unsloth
 openai>=1.0.0
 anthropic>=0.3.0
 # Server
