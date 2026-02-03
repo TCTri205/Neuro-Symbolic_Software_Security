@@ -40,19 +40,35 @@ def prepare_data(output_path: Path, limit: int = 5000):
         sys.exit(1)
 
     hf_token = os.getenv("HF_TOKEN")
-    dataset_name = "S2K/cve_fixes"
 
-    logger.info(f"⬇️ Downloading '{dataset_name}' dataset from HuggingFace...")
-    try:
-        # Load stream=True to avoid downloading the whole thing if we just need a subset
-        dataset = load_dataset(
-            dataset_name, split="train", streaming=True, token=hf_token
-        )
-    except Exception as e:
-        logger.error(f"❌ Failed to download dataset '{dataset_name}': {e}")
+    # Try multiple dataset sources in order of preference
+    dataset_sources = [
+        "diversevul/diversevul",  # Public vulnerability detection dataset
+        "bigcode/the-stack-smol",  # Backup: general code dataset (large)
+    ]
+
+    dataset = None
+    dataset_name = None
+
+    for source in dataset_sources:
+        try:
+            logger.info(f"⬇️ Attempting to download '{source}' from HuggingFace...")
+            dataset = load_dataset(
+                source, split="train", streaming=True, token=hf_token
+            )
+            dataset_name = source
+            logger.info(f"✅ Successfully loaded dataset: {source}")
+            break
+        except Exception as e:
+            logger.warning(f"⚠️ Failed to load '{source}': {e}")
+            continue
+
+    if dataset is None:
+        logger.error("❌ Failed to download any available dataset.")
+        logger.error("💡 Tried sources: " + ", ".join(dataset_sources))
         if not hf_token:
             logger.error(
-                "💡 Hint: This dataset is Gated. Ensure you have set your HF_TOKEN."
+                "💡 Some datasets may be Gated. Set HF_TOKEN if you have access."
             )
         sys.exit(1)
 
@@ -60,52 +76,77 @@ def prepare_data(output_path: Path, limit: int = 5000):
     count = 0
     skipped = 0
 
-    logger.info("🔄 Processing and filtering for Python code...")
+    logger.info(
+        f"🔄 Processing dataset '{dataset_name}' and filtering for Python vulnerabilities..."
+    )
 
     for row in dataset:
         if count >= limit:
             break
 
-        # Filter for Python
-        # The dataset structure usually has 'lang' or similar.
-        # Checking schema of joshbressers/cve_fixes: usually has filename or explicitly lang column?
-        # Note: joshbressers/cve_fixes is raw.
-        # Let's check typical structure or use a heuristic.
-        # Actually, let's use a known compatible subset if possible,
-        # but sticking to the request "Real Data", we filter by extension.
+        # Handle different dataset schemas
+        if dataset_name == "diversevul/diversevul":
+            # DiverseVul schema: func (code), target (0=safe, 1=vulnerable), cwe (CWE-ID)
+            code = row.get("func", "")
+            is_vulnerable = row.get("target", 0) == 1
+            cwe_id = row.get("cwe", "Unknown-CWE")
 
-        filename = row.get("filename", "")
-        if not filename.endswith(".py"):
+            # Skip non-vulnerable or invalid entries
+            if not is_vulnerable or not code or len(code) > 4096:
+                skipped += 1
+                continue
+
+            # For vulnerabilities, create a "before fix" example
+            # Since we don't have the fixed version, we'll use this for detection training
+            registry.add_positive_example(
+                code=code,
+                vuln_type="Security Vulnerability",
+                reasoning=f"Code contains vulnerability (CWE: {cwe_id})",
+                source=f"DiverseVul-{cwe_id}",
+            )
+
+        elif dataset_name == "bigcode/the-stack-smol":
+            # The Stack schema: content (code), language
+            # Filter for Python and create examples
+            lang = row.get("lang", "")
+            if lang.lower() != "python":
+                continue
+
+            code = row.get("content", "")
+            if not code or len(code) > 4096:
+                skipped += 1
+                continue
+
+            # Since this is general code, we'll use it as safe examples
+            # Skip for now as we want vulnerability data
             continue
 
-        code_before = row.get("old_code", "")
-        code_after = row.get("new_code", "")
-        cve_id = row.get("cve_id", "Unknown-CVE")
+        else:
+            # Unknown schema - try generic approach
+            filename = row.get("filename", "")
+            if not filename.endswith(".py"):
+                continue
 
-        # Basic validation
-        if not code_before or not code_after or len(code_before) > 4096:
-            skipped += 1
-            continue
+            code_before = row.get("old_code", row.get("code_before", ""))
+            code_after = row.get("new_code", row.get("code_after", ""))
 
-        # Heuristic for Vuln Type (since dataset might not label it granulary)
-        # In a real pipeline, we might use keywords or another classifier.
-        # For now, we label generic "Unknown Vulnerability" or try to guess.
-        # Docs 06 implies we rely on "CVEFixes", which maps to CVEs.
-        # We'll use the CVE ID as the source.
+            if not code_before or not code_after or len(code_before) > 4096:
+                skipped += 1
+                continue
 
-        # Try to infer summary from CVE ID if available (basic check)
-        # Ideally we would fetch CVE details, but keeping it offline/fast for now.
+            cve_id = row.get("cve_id", row.get("id", "Unknown-CVE"))
 
-        registry.add_fix_example(
-            code_before=code_before,
-            code_after=code_after,
-            vuln_type="Security Vulnerability",  # Normalized for consistency with Server
-            source=cve_id,
-        )
+            registry.add_fix_example(
+                code_before=code_before,
+                code_after=code_after,
+                vuln_type="Security Vulnerability",
+                source=cve_id,
+            )
+
         count += 1
 
         if count % 100 == 0:
-            logger.info(f"   Collected {count} Python examples...")
+            logger.info(f"   Collected {count} examples...")
 
     logger.info("✅ Processing complete.")
     logger.info(f"   Total Examples: {count}")
